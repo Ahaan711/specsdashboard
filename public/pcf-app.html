@@ -852,7 +852,7 @@ function editLead(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
   const f = document.getElementById('leadForm');
   // Detect custom sector/dealType not in dropdown
-  const sectorOpts = ['Real Estate','Infrastructure','Corporate','SME','Specialty Finance','Other'];
+  const sectorOpts = ['Real Estate','Infrastructure','Corporate','SME','Specialty Finance','NBFC / Lending','Fintech','Consumer','Agritech','Healthcare','Logistics','EdTech','Manufacturing','Technology / SaaS','Renewable Energy','Other'];
   const dtOpts = ['Single Tranche','Multiple Tranches','Other'];
   const sectorVal = sectorOpts.includes(l.sector) ? l.sector : 'Other';
   const dtVal = dtOpts.includes(l.dealType) ? l.dealType : 'Other';
