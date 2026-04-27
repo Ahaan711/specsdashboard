@@ -1639,7 +1639,8 @@ async function handleTermSheet(ev){
     setIf('about', parsed.about);
     setIf('upfrontFee', parsed.upfrontFee);
     document.querySelector('#dealModal h2 span').textContent = 'Add Deal — Pre-filled from Term Sheet';
-    toast(`Parsed ${Object.values(parsed).filter(v=>v!=null&&v!=='').length} fields — review & save`);
+    saveDocument(file, 'term-sheet', { note: parsed.company ? `Term sheet for ${parsed.company}` : 'Term sheet', linkedCompany: parsed.company || '' });
+    toast(`Parsed ${Object.values(parsed).filter(v=>v!=null&&v!=='').length} fields — file saved to Documents`);
   } catch(err){
     console.error(err);
     alert('Could not read term sheet: '+err.message);
