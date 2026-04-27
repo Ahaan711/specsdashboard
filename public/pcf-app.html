@@ -879,6 +879,8 @@ function applySectorSuggestion(data){
     if(hint) hint.textContent = `✨ auto-assigned (${data.confidence||'ai'})`;
   } else if(hint) hint.textContent='';
 }
+
+function openLeadModal(){
   document.getElementById('leadForm').reset();
   document.getElementById('leadForm').id.value = '';
   document.getElementById('sectorOtherRow').style.display='none';
