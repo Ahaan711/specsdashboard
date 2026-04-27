@@ -1,17 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import appHtml from "../../public/pcf-app.html?raw";
 
 export const Route = createFileRoute("/app")({
-  server: {
-    handlers: {
-      GET: () => {
-        return new Response(appHtml, {
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-            "Cache-Control": "public, max-age=300",
-          },
-        });
-      },
-    },
-  },
+  component: AppPage,
 });
+
+function AppPage() {
+  return (
+    <div className="h-screen w-full overflow-hidden bg-background">
+      <iframe
+        src="/pcf-app.html"
+        title="SpECS Fund Manager"
+        className="block h-full w-full border-0"
+      />
+    </div>
+  );
+}
