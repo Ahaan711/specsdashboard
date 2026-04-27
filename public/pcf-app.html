@@ -840,7 +840,45 @@ function toggleOther(sel, inputId){
   if(input){ input.required = show; if(!show) input.value=''; }
 }
 
-function openLeadModal(){
+let _sectorAiCache = {};
+let _sectorAiInflight = null;
+async function autoSuggestSector(company){
+  const name = (company||'').trim();
+  const hint = document.getElementById('sectorAiHint');
+  const sel = document.getElementById('leadSectorSelect');
+  if(!name || !sel) return;
+  // Don't override if user already picked a non-default sector
+  const userTouched = sel.dataset.userTouched === '1';
+  if(userTouched) return;
+  if(_sectorAiCache[name.toLowerCase()]){
+    applySectorSuggestion(_sectorAiCache[name.toLowerCase()]);
+    return;
+  }
+  if(hint) hint.textContent = '✨ detecting…';
+  try{
+    const r = await fetch('/api/classify-sector', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ company: name })
+    });
+    if(!r.ok){ if(hint) hint.textContent=''; return; }
+    const data = await r.json();
+    if(data && data.sector){
+      _sectorAiCache[name.toLowerCase()] = data;
+      applySectorSuggestion(data);
+    } else if(hint) hint.textContent='';
+  }catch(e){ if(hint) hint.textContent=''; }
+}
+function applySectorSuggestion(data){
+  const sel = document.getElementById('leadSectorSelect');
+  const hint = document.getElementById('sectorAiHint');
+  if(!sel) return;
+  const opts = Array.from(sel.options).map(o=>o.value);
+  if(opts.includes(data.sector)){
+    sel.value = data.sector;
+    toggleOther(sel,'sectorOther');
+    if(hint) hint.textContent = `✨ auto-assigned (${data.confidence||'ai'})`;
+  } else if(hint) hint.textContent='';
+}
   document.getElementById('leadForm').reset();
   document.getElementById('leadForm').id.value = '';
   document.getElementById('sectorOtherRow').style.display='none';
