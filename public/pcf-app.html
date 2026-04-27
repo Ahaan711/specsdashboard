@@ -740,11 +740,21 @@ function renderLeads(){
   const ls = filterLeads();
   if(leadView==='table'){
     const tb = document.getElementById('leadsTbody');
-    if(!ls.length){tb.innerHTML='<tr><td colspan="9" class="empty">No leads. Click "+ Add Lead" to get started.</td></tr>'}
-    else tb.innerHTML = ls.map(l=>`
+    if(!ls.length){tb.innerHTML='<tr><td colspan="14" class="empty">No leads. Click "+ Add Lead" to get started.</td></tr>'}
+    else tb.innerHTML = ls.map((l,i)=>{
+      const refLine = l.referredBy ? `<b>${esc(l.referredBy)}</b>${l.referredContact?`<div style="font-size:11px;color:var(--text-dim)">${esc(l.referredContact)}</div>`:''}` : '—';
+      return `
       <tr>
-        <td><b>${esc(l.company)}</b></td><td>${esc(l.sector)}</td><td>${esc(l.dealType)}</td>
-        <td class="num">${fmt(l.size)}</td><td class="num">${pct2(+l.coupon)}</td>
+        <td>${i+1}</td>
+        <td><b>${esc(l.company)}</b></td>
+        <td>${esc(l.sector)}</td>
+        <td>${esc(l.dealType)}</td>
+        <td>${esc(l.primaryPerson||'—')}${l.secondaryPerson?`<div style="font-size:11px;color:var(--text-dim)">2°: ${esc(l.secondaryPerson)}</div>`:''}</td>
+        <td>${refLine}</td>
+        <td class="num">${fmt(l.size)}</td>
+        <td class="num">${l.tenor?(+l.tenor).toFixed(2):'—'}</td>
+        <td class="num">${l.coupon?pct2(+l.coupon):'—'}</td>
+        <td>${esc(l.useOfFunds||'—')}</td>
         <td><span class="${stageClass(l.stage)}">${esc(l.stage)}</span></td>
         <td>${esc(l.closeDate||'—')}</td>
         <td class="pri-${l.priority}">${esc(l.priority||'')}</td>
@@ -753,7 +763,7 @@ function renderLeads(){
           ${l.stage==='Closed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${l.id}')">→ Deal</button>`:''}
           <button class="btn btn-danger btn-sm" onclick="delLead('${l.id}')">×</button>
         </td>
-      </tr>`).join('');
+      </tr>`}).join('');
   } else {
     const stages = ['Prospect','Under Review','Term Sheet','Due Diligence','Credit Approved','Closed','Rejected'];
     document.getElementById('kanban').innerHTML = stages.map(s=>{
