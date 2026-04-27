@@ -29,14 +29,18 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "SpECS Dashboard" },
+      { name: "description", content: "A private credit fund dashboard for managing leads, portfolios, and financial modeling." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "SpECS Dashboard" },
+      { property: "og:description", content: "A private credit fund dashboard for managing leads, portfolios, and financial modeling." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "SpECS Dashboard" },
+      { name: "twitter:description", content: "A private credit fund dashboard for managing leads, portfolios, and financial modeling." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/78e381a7-f909-4746-b685-2cbc94943932/id-preview-3072caff--a9309807-6ca3-431e-a06b-e4c125a8b4ce.lovable.app-1777281082421.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/78e381a7-f909-4746-b685-2cbc94943932/id-preview-3072caff--a9309807-6ca3-431e-a06b-e4c125a8b4ce.lovable.app-1777281082421.png" },
     ],
     links: [
       {
