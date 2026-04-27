@@ -1052,65 +1052,7 @@ function renderPortfolio(){
       <td><input value="${esc(x.notes||'')}" onchange="updDist(${i},'notes',this.value)"></td>
       <td><button class="btn btn-danger btn-sm" onclick="delDist(${i})">×</button></td>
     </tr>`).join('') : '<tr><td colspan="4" class="empty">No distributions logged. Click "+ Add Distribution".</td></tr>';
-}
-
-function updateFund(){
-  const v = id => { const e=document.getElementById(id); return e&&e.value!==''?+e.value:0; };
-  state.fund = { commitment:v('fundCommitment'), drawn:v('fundDrawn'), cashAvailable:v('fundCash'), cashYield:v('fundCashYield') };
-  save();
-  renderPortfolio();
-}
-function addDistribution(){
-  state.distributions = state.distributions || [];
-  state.distributions.push({date:new Date().toISOString().slice(0,10), amount:0, notes:''});
-  save(); renderPortfolio();
-}
-function updDist(i,field,val){
-  if(!state.distributions[i]) return;
-  state.distributions[i][field] = val;
-  save();
-  if(field!=='date' && field!=='notes') renderPortfolio(); // refresh KPI count if needed
-}
-function delDist(i){
-  state.distributions.splice(i,1); save(); renderPortfolio();
-}
-
-function seedSpECS(){
-  if(state.deals.length && !confirm('This will add 9 SpECS deals to your existing portfolio. Continue?')) return;
-  const today = new Date().toISOString().slice(0,10);
-  const seed = [
-    {company:'PlasmaGen BioSciences Pvt Ltd', sector:'Bio-pharmaceutical', size:30, invested:30, coupon:15.5, xirrOverride:17.3},
-    {company:'PWDS Extrusions Pvt Ltd', sector:'Manufacturing', size:50, invested:50, coupon:14.5, xirrOverride:15.8},
-    {company:'KrazyBee Services Pvt Ltd (Tranche 1)', sector:'Consumer Finance', size:5, invested:5, coupon:10.4, xirrOverride:11.8},
-    {company:'Ecozen Solutions Pvt Ltd', sector:'Solar Controllers (EPC)', size:50, invested:50, coupon:13.1, xirrOverride:15.3},
-    {company:'KrazyBee Services Pvt Ltd (Tranche 2)', sector:'Consumer Finance', size:10, invested:10, coupon:10.5, xirrOverride:11.5},
-    {company:'House of Kieraya Ltd (Furlenco T1)', sector:'Services (Furniture & Appliance Rentals)', size:10.4, invested:10.4, coupon:11.8, xirrOverride:13.4},
-    {company:'House of Kieraya Ltd (Furlenco T2)', sector:'Services (Furniture & Appliance Rentals)', size:0.7, invested:0.7, coupon:11.8, xirrOverride:13.4},
-    {company:'Farmart Services Pvt Ltd', sector:'Other', sectorOther:'Agritech', size:24.9, invested:24.9, coupon:0, xirrOverride:null},
-    {company:'Mpokket Financial Services Pvt Ltd', sector:'Consumer Finance', size:36, invested:36, coupon:0, xirrOverride:null},
-  ];
-  seed.forEach(s=>{
-    const d = {
-      id: uid(),
-      company: s.company, sector: s.sector, sectorOther: s.sectorOther||'',
-      dealType: 'Single Tranche', dealTypeOther:'',
-      size: s.size, invested: s.invested,
-      coupon: s.coupon||0, tenor: 36, startDate: today,
-      repayType:'Bullet', amortFreq:'Quarterly', moratorium:0, upfrontFee:0,
-      status:'Active', rating:'Unrated', security:'NCD',
-      xirrOverride: (s.xirrOverride!=null?s.xirrOverride:''),
-      covenants:'', tranches:[]
-    };
-    state.deals.push(d);
-    state.cashflows[d.id] = []; // user can model later
-  });
-  // fund summary
-  state.fund = { commitment:422.5, drawn:253.1, cashAvailable:22.98, cashYield:4.5 };
-  save();
-  renderPortfolio();
-  toast('Seeded 9 SpECS deals + fund summary');
-}
-
+  }
 
   // table
   const tb = document.getElementById('dealsTbody');
