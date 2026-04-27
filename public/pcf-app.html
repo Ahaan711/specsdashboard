@@ -1636,7 +1636,7 @@ function openDealDetail(id){
   const cf = state.cashflows[d.id]||[];
   const today = new Date().toISOString().slice(0,10);
   const repaid = cf.filter(r=>r.date<=today).reduce((a,r)=>a+r.principal,0);
-  const inv = investedOf(d);
+  const inv = (d.invested!=null && d.invested!=='' && isFinite(+d.invested)) ? +d.invested : (+d.size||0);
   const outs = inv-repaid;
   const matDate = cf.length ? cf[cf.length-1].date : '—';
   const dxirr = (d.xirrOverride!=null && d.xirrOverride!=='' && isFinite(+d.xirrOverride)) ? (+d.xirrOverride/100) : xirr(dealCashflowsForXIRR(d));
