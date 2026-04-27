@@ -1887,7 +1887,48 @@ function clearAllDocuments(){
    ========================================================= */
 renderModeForm();
 renderLeads();
+backfillSectors();
 window.addEventListener('beforeunload', save);
+
+/* =========================================================
+   ONE-TIME SECTOR BACKFILL (re-classify "Other" via AI)
+   ========================================================= */
+async function classifyOne(company){
+  try{
+    const r = await fetch('/api/classify-sector', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ company })
+    });
+    if(!r.ok) return null;
+    const data = await r.json();
+    return data && data.sector ? data.sector : null;
+  } catch(e){ return null; }
+}
+async function backfillSectors(force){
+  const FLAG = 'pcf_sector_backfill_v1';
+  if(!force && localStorage.getItem(FLAG)) return;
+  const targets = [];
+  (state.leads||[]).forEach(l=>{ if(l.company && (!l.sector || l.sector==='Other')) targets.push({obj:l, kind:'lead'}); });
+  (state.deals||[]).forEach(d=>{ if(d.company && (!d.sector || d.sector==='Other')) targets.push({obj:d, kind:'deal'}); });
+  if(!targets.length){ localStorage.setItem(FLAG,'1'); return; }
+  toast(`✨ Auto-classifying ${targets.length} sector${targets.length>1?'s':''}…`);
+  let updated = 0;
+  for(const t of targets){
+    const sector = await classifyOne(t.obj.company);
+    if(sector && sector!=='Other'){ t.obj.sector = sector; updated++; }
+    await new Promise(r=>setTimeout(r, 250));   // gentle pacing
+  }
+  if(updated){
+    save();
+    if(document.getElementById('leads').classList.contains('active')) renderLeads();
+    if(document.getElementById('portfolio').classList.contains('active')) renderPortfolio();
+    toast(`✅ Updated ${updated} sector${updated>1?'s':''}`);
+  } else {
+    toast('No sectors changed');
+  }
+  localStorage.setItem(FLAG,'1');
+}
+window.rerunSectorBackfill = () => backfillSectors(true);
 </script>
 </body>
 </html>
