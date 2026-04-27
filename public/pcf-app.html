@@ -302,10 +302,33 @@
       <h1 class="page-title">Portfolio Dashboard</h1>
       <div class="page-sub">Live view of all deployed capital</div>
     </div>
-    <button class="btn btn-primary" onclick="openDealModal()">+ Add Deal</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="seedSpECS()" title="Load the SpECS Fund deals as of Mar 31, 2026">⇣ Seed SpECS Portfolio</button>
+      <button class="btn btn-primary" onclick="openDealModal()">+ Add Deal</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3>Fund Settings (as on reporting date)</h3>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+      <div class="form-row"><label>Capital Commitment (₹ Cr)</label><input id="fundCommitment" type="number" step="0.01" oninput="updateFund()"></div>
+      <div class="form-row"><label>Drawn (₹ Cr)</label><input id="fundDrawn" type="number" step="0.01" oninput="updateFund()"></div>
+      <div class="form-row"><label>Cash Available (₹ Cr)</label><input id="fundCash" type="number" step="0.01" oninput="updateFund()"></div>
+      <div class="form-row"><label>Cash Yield (% p.a.)</label><input id="fundCashYield" type="number" step="0.01" oninput="updateFund()"></div>
+    </div>
   </div>
 
   <div class="kpi-grid" id="kpiGrid"></div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3>Income Distributions Log <button class="btn btn-ghost btn-sm" style="float:right" onclick="addDistribution()">+ Add Distribution</button></h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th class="num">Amount (₹ Cr)</th><th>Notes</th><th>Actions</th></tr></thead>
+        <tbody id="distTbody"></tbody>
+      </table>
+    </div>
+  </div>
 
   <div class="card" style="margin-bottom:16px">
     <h3>Deals</h3>
@@ -527,16 +550,20 @@
 /* =========================================================
    STATE & PERSISTENCE
    ========================================================= */
-const KEYS = { leads:'pcf_leads', deals:'pcf_deals', cashflows:'pcf_cashflows' };
+const KEYS = { leads:'pcf_leads', deals:'pcf_deals', cashflows:'pcf_cashflows', fund:'pcf_fund', distributions:'pcf_distributions' };
 let state = {
   leads: JSON.parse(localStorage.getItem(KEYS.leads) || '[]'),
   deals: JSON.parse(localStorage.getItem(KEYS.deals) || '[]'),
   cashflows: JSON.parse(localStorage.getItem(KEYS.cashflows) || '{}'),
+  fund: JSON.parse(localStorage.getItem(KEYS.fund) || '{"commitment":0,"drawn":0,"cashAvailable":0,"cashYield":0}'),
+  distributions: JSON.parse(localStorage.getItem(KEYS.distributions) || '[]'),
 };
 function save(){
   localStorage.setItem(KEYS.leads, JSON.stringify(state.leads));
   localStorage.setItem(KEYS.deals, JSON.stringify(state.deals));
   localStorage.setItem(KEYS.cashflows, JSON.stringify(state.cashflows));
+  localStorage.setItem(KEYS.fund, JSON.stringify(state.fund));
+  localStorage.setItem(KEYS.distributions, JSON.stringify(state.distributions));
 }
 const uid = () => Math.random().toString(36).slice(2,10);
 function toast(msg){
