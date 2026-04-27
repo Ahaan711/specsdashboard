@@ -45,13 +45,13 @@ function Index() {
         </p>
         <div className="flex gap-3 justify-center flex-wrap">
           <a
-            href="/pcf-app.html"
+            href="/app"
             className="inline-flex items-center px-6 py-3 rounded-md bg-[#FF7553] text-white font-semibold hover:bg-[#ff8e72] transition-colors"
           >
             Launch Fund Manager →
           </a>
           <a
-            href="/pcf-app.html"
+            href="/app"
             download="SpECS_Fund_Manager.html"
             className="inline-flex items-center px-6 py-3 rounded-md border border-[#284F70] text-[#E6EDF6] font-semibold hover:border-[#FF7553] transition-colors"
           >
