@@ -313,7 +313,7 @@
       <table>
         <thead><tr>
           <th>Deal Name</th><th>Sector</th>
-          <th class="num">Disbursed</th><th class="num">Outstanding</th>
+          <th class="num">Sanctioned</th><th class="num">Invested</th><th class="num">Outstanding</th>
           <th class="num">Coupon</th><th class="num">Tenor</th>
           <th>Start</th><th>Maturity</th><th class="num">XIRR</th>
           <th>Status</th><th>Actions</th>
@@ -472,7 +472,8 @@
         <option>Single Tranche</option><option>Multiple Tranches</option><option>Senior Secured</option><option>Mezzanine</option><option>Unitranche</option>
         <option>Second Lien</option><option>Subordinated</option><option>Other</option></select></div>
       <div class="form-row" id="dealDealTypeOtherRow" style="display:none"><label>Specify Deal Type *</label><input name="dealTypeOther" id="dealDealTypeOther"></div>
-      <div class="form-row"><label>Deal Size (₹ Cr) *</label><input type="number" step="0.01" name="size" required></div>
+      <div class="form-row"><label>Sanctioned Amount (₹ Cr) *</label><input type="number" step="0.01" name="size" required></div>
+      <div class="form-row"><label>Invested Amount (₹ Cr)</label><input type="number" step="0.01" name="invested" placeholder="Optional — defaults to Sanctioned"></div>
       <div class="form-row"><label>Coupon Rate (% p.a.) *</label><input type="number" step="0.01" name="coupon" required></div>
       <div class="form-row"><label>Tenor (months) *</label><input type="number" name="tenor" required></div>
       <div class="form-row"><label>Disbursement Date *</label><input type="date" name="startDate" required></div>
@@ -946,9 +947,12 @@ function exportCFCSV(){
 function renderPortfolio(){
   // KPIs
   const deals = state.deals;
-  const totalDeployed = deals.reduce((a,d)=>a+(+d.size||0),0);
+  const investedOf = d => (d.invested!=null && d.invested!=='' && isFinite(+d.invested)) ? +d.invested : (+d.size||0);
+  const totalSanctioned = deals.reduce((a,d)=>a+(+d.size||0),0);
+  const totalInvested = deals.reduce((a,d)=>a+investedOf(d),0);
+  const totalDeployed = totalInvested;
   const active = deals.filter(d=>d.status==='Active').length;
-  const wac = deals.length ? deals.reduce((a,d)=>a+(+d.coupon||0)*(+d.size||0),0)/totalDeployed : 0;
+  const wac = totalInvested ? deals.reduce((a,d)=>a+(+d.coupon||0)*investedOf(d),0)/totalInvested : 0;
   const today = new Date().toISOString().slice(0,10);
   let intRcvd = 0, prinRcvd = 0, outstanding = 0;
   deals.forEach(d=>{
@@ -979,7 +983,8 @@ function renderPortfolio(){
   const cocMultiple = totalDeployed>0 ? (intRcvd+prinRcvd+outstanding)/totalDeployed : 0;
 
   document.getElementById('kpiGrid').innerHTML = `
-    <div class="kpi"><div class="label">Deployed Capital</div><div class="value">₹${fmt(totalDeployed)} Cr</div></div>
+    <div class="kpi"><div class="label">Sanctioned Amount</div><div class="value">₹${fmt(totalSanctioned)} Cr</div></div>
+    <div class="kpi"><div class="label">Invested Amount</div><div class="value">₹${fmt(totalInvested)} Cr</div><div class="sub">${totalSanctioned>0?((totalInvested/totalSanctioned)*100).toFixed(1):'0.0'}% of sanctioned</div></div>
     <div class="kpi tan"><div class="label">Active Deals</div><div class="value">${active}</div><div class="sub">of ${deals.length} total</div></div>
     <div class="kpi teal"><div class="label">Wtd Avg Coupon</div><div class="value">${pct2(wac)}</div></div>
     <div class="kpi green"><div class="label">Fund XIRR</div><div class="value">${pct(fundXIRR)}</div></div>
@@ -991,16 +996,17 @@ function renderPortfolio(){
 
   // table
   const tb = document.getElementById('dealsTbody');
-  if(!deals.length){tb.innerHTML='<tr><td colspan="11" class="empty">No deals. Click "+ Add Deal".</td></tr>'}
+  if(!deals.length){tb.innerHTML='<tr><td colspan="12" class="empty">No deals. Click "+ Add Deal".</td></tr>'}
   else tb.innerHTML = deals.map(d=>{
     const cf = state.cashflows[d.id]||[];
     const repaid = cf.filter(r=>r.date<=today).reduce((a,r)=>a+r.principal,0);
-    const outs = (+d.size)-repaid;
+    const inv = investedOf(d);
+    const outs = inv-repaid;
     const matDate = cf.length ? cf[cf.length-1].date : '—';
     const dxirr = (d.xirrOverride!=null && d.xirrOverride!=='' && isFinite(+d.xirrOverride)) ? (+d.xirrOverride/100) : xirr(dealCashflowsForXIRR(d));
     return `<tr>
       <td><b>${esc(d.company)}</b></td><td>${esc(d.sector)}</td>
-      <td class="num">${fmt(d.size)}</td><td class="num">${fmt(outs)}</td>
+      <td class="num">${fmt(d.size)}</td><td class="num">${fmt(inv)}</td><td class="num">${fmt(outs)}</td>
       <td class="num">${pct2(+d.coupon)}</td><td class="num">${d.tenor}m</td>
       <td>${esc(d.startDate)}</td><td>${matDate}</td>
       <td class="num">${pct(dxirr)}</td>
@@ -1326,7 +1332,7 @@ function exportXLSX(){
   const leadCols=['id','company','sector','dealType','size','tenor','primaryPerson','secondaryPerson','referredBy','referredContact','useOfFunds','stage','structure','notes'];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.leads.map(l=>{const o={};leadCols.forEach(c=>o[c]=l[c]||'');return o})), 'Leads');
   // deals
-  const dealCols=['id','company','sector','dealType','size','coupon','tenor','startDate','repayType','amortFreq','moratorium','upfrontFee','status','rating','security','xirrOverride','covenants'];
+  const dealCols=['id','company','sector','dealType','size','invested','coupon','tenor','startDate','repayType','amortFreq','moratorium','upfrontFee','status','rating','security','xirrOverride','covenants'];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.deals.map(d=>{const o={};dealCols.forEach(c=>o[c]=d[c]||'');return o})), 'Deals');
   // cash flows long
   const cf = [];
