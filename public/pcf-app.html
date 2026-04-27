@@ -470,12 +470,14 @@
   <form id="dealForm" onsubmit="saveDeal(event)">
     <div class="form-grid">
       <div class="form-row"><label>Deal / Company Name *</label><input name="company" required></div>
-      <div class="form-row"><label>Sector *</label><select name="sector" required>
+      <div class="form-row"><label>Sector *</label><select name="sector" required onchange="toggleOther(this,'dealSectorOther')">
         <option>Real Estate</option><option>Infrastructure</option><option>Corporate</option>
         <option>SME</option><option>Specialty Finance</option><option>Other</option></select></div>
-      <div class="form-row"><label>Deal Type *</label><select name="dealType" required>
-        <option>Senior Secured</option><option>Mezzanine</option><option>Unitranche</option>
-        <option>Second Lien</option><option>Subordinated</option></select></div>
+      <div class="form-row" id="dealSectorOtherRow" style="display:none"><label>Specify Sector *</label><input name="sectorOther" id="dealSectorOther"></div>
+      <div class="form-row"><label>Deal Type *</label><select name="dealType" required onchange="toggleOther(this,'dealDealTypeOther')">
+        <option>Single Tranche</option><option>Multiple Tranches</option><option>Senior Secured</option><option>Mezzanine</option><option>Unitranche</option>
+        <option>Second Lien</option><option>Subordinated</option><option>Other</option></select></div>
+      <div class="form-row" id="dealDealTypeOtherRow" style="display:none"><label>Specify Deal Type *</label><input name="dealTypeOther" id="dealDealTypeOther"></div>
       <div class="form-row"><label>Deal Size (₹ Cr) *</label><input type="number" step="0.01" name="size" required></div>
       <div class="form-row"><label>Coupon Rate (% p.a.) *</label><input type="number" step="0.01" name="coupon" required></div>
       <div class="form-row"><label>Tenor (months) *</label><input type="number" name="tenor" required></div>
