@@ -881,6 +881,9 @@ function saveDeal(e){
   e.preventDefault();
   const fd = new FormData(e.target);
   const obj = Object.fromEntries(fd.entries());
+  if(obj.sector==='Other' && (obj.sectorOther||'').trim()) obj.sector = obj.sectorOther.trim();
+  if(obj.dealType==='Other' && (obj.dealTypeOther||'').trim()) obj.dealType = obj.dealTypeOther.trim();
+  delete obj.sectorOther; delete obj.dealTypeOther;
   obj.tranches = collectTranches();
   if(!obj.id){ obj.id = uid(); state.deals.push(obj); } else {
     const i = state.deals.findIndex(x=>x.id===obj.id); if(i>=0) state.deals[i] = {...state.deals[i], ...obj};
