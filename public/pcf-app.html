@@ -250,9 +250,10 @@
   <div class="toolbar">
     <input id="leadSearch" placeholder="Search company or notes..." class="grow" oninput="renderLeads()">
     <select id="leadFilterStage" onchange="renderLeads()">
-      <option value="">All Stages</option>
+      <option value="">All Statuses</option>
+      <option>Active</option><option>Passive</option><option>Lost</option><option>Rejected</option>
       <option>Prospect</option><option>Under Review</option><option>Term Sheet</option>
-      <option>Due Diligence</option><option>Credit Approved</option><option>Closed</option><option>Rejected</option>
+      <option>Due Diligence</option><option>Credit Approved</option><option>Closed</option>
     </select>
     <select id="leadFilterSector" onchange="renderLeads()">
       <option value="">All Sectors</option>
@@ -264,8 +265,7 @@
     </select>
     <select id="leadFilterDealType" onchange="renderLeads()">
       <option value="">All Deal Types</option>
-      <option>Senior Secured</option><option>Mezzanine</option><option>Unitranche</option>
-      <option>Second Lien</option><option>Subordinated</option>
+      <option>Single Tranche</option><option>Multiple Tranches</option><option>Other</option>
     </select>
     <div class="seg">
       <button id="viewTable" class="active" onclick="setLeadView('table')">Table</button>
