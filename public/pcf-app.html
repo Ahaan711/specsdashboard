@@ -1588,7 +1588,8 @@ function importXLSX(e){
         Object.assign(state.cashflows, grouped);
       }
       save(); renderLeads(); renderPortfolio();
-      toast(`Imported ${imported} rows`);
+      saveDocument(file, 'excel-import', { note:`Imported ${imported} rows` });
+      toast(`Imported ${imported} rows · file saved to Documents`);
     } catch(err){ alert('Import failed: '+err.message) }
     e.target.value='';
   };
