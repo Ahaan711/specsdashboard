@@ -431,26 +431,31 @@
   <h2><span>Add Lead</span><span class="x" onclick="closeModal('leadModal')">×</span></h2>
   <form id="leadForm" onsubmit="saveLead(event)">
     <div class="form-grid">
-      <div class="form-row"><label>Company Name *</label><input name="company" required></div>
-      <div class="form-row"><label>Sector *</label><select name="sector" required>
+      <div class="form-row"><label>Company / Client *</label><input name="company" required></div>
+      <div class="form-row"><label>Sector *</label><select name="sector" required onchange="toggleOther(this,'sectorOther')">
         <option>Real Estate</option><option>Infrastructure</option><option>Corporate</option>
         <option>SME</option><option>Specialty Finance</option><option>Other</option></select></div>
-      <div class="form-row"><label>Deal Type *</label><select name="dealType" required>
-        <option>Senior Secured</option><option>Mezzanine</option><option>Unitranche</option>
-        <option>Second Lien</option><option>Subordinated</option></select></div>
+      <div class="form-row" id="sectorOtherRow" style="display:none"><label>Specify Sector *</label><input name="sectorOther" id="sectorOther" placeholder="Enter custom sector"></div>
+      <div class="form-row"><label>Deal Type *</label><select name="dealType" required onchange="toggleOther(this,'dealTypeOther')">
+        <option>Single Tranche</option><option>Multiple Tranches</option><option>Other</option></select></div>
+      <div class="form-row" id="dealTypeOtherRow" style="display:none"><label>Specify Deal Type *</label><input name="dealTypeOther" id="dealTypeOther" placeholder="Enter custom deal type"></div>
       <div class="form-row"><label>Deal Size (₹ Cr) *</label><input type="number" step="0.01" name="size" required></div>
-      <div class="form-row"><label>Expected Coupon (% p.a.) *</label><input type="number" step="0.01" name="coupon" required></div>
-      <div class="form-row"><label>Expected Tenor (months) *</label><input type="number" name="tenor" required></div>
-      <div class="form-row"><label>Source</label><select name="source">
-        <option>Direct</option><option>Intermediary</option><option>Referral</option><option>Platform</option></select></div>
-      <div class="form-row"><label>Stage *</label><select name="stage" required>
+      <div class="form-row"><label>Tenor (years)</label><input type="number" step="0.01" name="tenor" placeholder="e.g. 3"></div>
+      <div class="form-row"><label>Expected Coupon (% p.a.)</label><input type="number" step="0.01" name="coupon"></div>
+      <div class="form-row"><label>Primary Person (case owner) *</label><input name="primaryPerson" required placeholder="Internal lead"></div>
+      <div class="form-row"><label>Secondary Person</label><input name="secondaryPerson"></div>
+      <div class="form-row"><label>Referred By</label><input name="referredBy" placeholder="Arranger / referrer name"></div>
+      <div class="form-row"><label>Referrer Contact (phone / email)</label><input name="referredContact" placeholder="+91… or name@firm.com"></div>
+      <div class="form-row full"><label>Use of Funds</label><input name="useOfFunds" placeholder="e.g. Working capital, capex, refinancing"></div>
+      <div class="form-row"><label>Status *</label><select name="stage" required>
+        <option>Active</option><option>Passive</option><option>Lost</option><option>Rejected</option>
         <option>Prospect</option><option>Under Review</option><option>Term Sheet</option>
-        <option>Due Diligence</option><option>Credit Approved</option><option>Closed</option><option>Rejected</option></select></div>
+        <option>Due Diligence</option><option>Credit Approved</option><option>Closed</option></select></div>
+      <div class="form-row"><label>Potential Structure</label><input name="structure" placeholder="e.g. NCD, Term Loan"></div>
       <div class="form-row"><label>Expected Close Date</label><input type="date" name="closeDate"></div>
-      <div class="form-row"><label>Assigned To</label><input name="assignedTo"></div>
       <div class="form-row"><label>Priority</label><select name="priority">
         <option>High</option><option selected>Medium</option><option>Low</option></select></div>
-      <div class="form-row full"><label>Notes</label><textarea name="notes"></textarea></div>
+      <div class="form-row full"><label>Current Status / Remarks</label><textarea name="notes"></textarea></div>
     </div>
     <input type="hidden" name="id">
     <div class="modal-actions">
