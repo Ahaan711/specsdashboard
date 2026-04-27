@@ -785,16 +785,37 @@ function renderLeads(){
 }
 function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
+function toggleOther(sel, inputId){
+  const row = document.getElementById(inputId+'Row');
+  const input = document.getElementById(inputId);
+  const show = sel.value === 'Other';
+  if(row) row.style.display = show ? '' : 'none';
+  if(input){ input.required = show; if(!show) input.value=''; }
+}
+
 function openLeadModal(){
   document.getElementById('leadForm').reset();
   document.getElementById('leadForm').id.value = '';
+  document.getElementById('sectorOtherRow').style.display='none';
+  document.getElementById('dealTypeOtherRow').style.display='none';
   document.querySelector('#leadModal h2 span').textContent = 'Add Lead';
   document.getElementById('leadModal').classList.add('open');
 }
 function editLead(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
   const f = document.getElementById('leadForm');
+  // Detect custom sector/dealType not in dropdown
+  const sectorOpts = ['Real Estate','Infrastructure','Corporate','SME','Specialty Finance','Other'];
+  const dtOpts = ['Single Tranche','Multiple Tranches','Other'];
+  const sectorVal = sectorOpts.includes(l.sector) ? l.sector : 'Other';
+  const dtVal = dtOpts.includes(l.dealType) ? l.dealType : 'Other';
   for(const k of Object.keys(l)){ if(f.elements[k]) f.elements[k].value = l[k]??'' }
+  f.elements.sector.value = sectorVal;
+  f.elements.dealType.value = dtVal;
+  if(sectorVal==='Other'){ document.getElementById('sectorOtherRow').style.display=''; document.getElementById('sectorOther').value = l.sector==='Other'?'':l.sector; }
+  else document.getElementById('sectorOtherRow').style.display='none';
+  if(dtVal==='Other'){ document.getElementById('dealTypeOtherRow').style.display=''; document.getElementById('dealTypeOther').value = l.dealType==='Other'?'':l.dealType; }
+  else document.getElementById('dealTypeOtherRow').style.display='none';
   document.querySelector('#leadModal h2 span').textContent = 'Edit Lead';
   document.getElementById('leadModal').classList.add('open');
 }
@@ -802,6 +823,10 @@ function saveLead(e){
   e.preventDefault();
   const fd = new FormData(e.target);
   const obj = Object.fromEntries(fd.entries());
+  // Merge "Other" custom values into the actual field
+  if(obj.sector==='Other' && (obj.sectorOther||'').trim()) obj.sector = obj.sectorOther.trim();
+  if(obj.dealType==='Other' && (obj.dealTypeOther||'').trim()) obj.dealType = obj.dealTypeOther.trim();
+  delete obj.sectorOther; delete obj.dealTypeOther;
   if(!obj.id){ obj.id = uid(); state.leads.push(obj); } else {
     const i = state.leads.findIndex(x=>x.id===obj.id); if(i>=0) state.leads[i] = {...state.leads[i], ...obj};
   }
