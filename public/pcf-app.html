@@ -231,6 +231,7 @@
   <button data-tab="portfolio">Portfolio Dashboard</button>
   <button data-tab="modeler">Deal Modeler & XIRR Calculator</button>
   <button data-tab="analytics">Fund Analytics</button>
+  <button data-tab="documents">Documents</button>
 </nav>
 
 <main>
@@ -453,6 +454,41 @@
   </div>
 </section>
 
+<!-- ============ DOCUMENTS ============ -->
+<section id="documents" class="section">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px">
+    <div>
+      <h1 class="page-title">Documents</h1>
+      <div class="page-sub">All imported Excel files and uploaded term sheets are saved here</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <label class="btn btn-ghost" style="cursor:pointer">⇧ Save a File
+        <input type="file" accept=".pdf,.docx,.xlsx,.xls,.txt,.csv,.png,.jpg,.jpeg" style="display:none" onchange="uploadDocument(event)">
+      </label>
+      <button class="btn btn-danger" onclick="clearAllDocuments()">Clear All</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <input id="docSearch" placeholder="Search file name or notes..." class="grow" oninput="renderDocuments()">
+    <select id="docFilterKind" onchange="renderDocuments()">
+      <option value="">All Types</option>
+      <option value="excel-import">Excel Import</option>
+      <option value="term-sheet">Term Sheet</option>
+      <option value="other">Other</option>
+    </select>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Sr</th><th>File Name</th><th>Type</th><th>Size</th><th>Linked To</th><th>Uploaded</th><th>Notes</th><th style="text-align:right">Actions</th>
+      </tr></thead>
+      <tbody id="docsTbody"></tbody>
+    </table>
+  </div>
+</section>
+
 </main>
 
 <!-- ============ MODALS ============ -->
@@ -577,13 +613,14 @@
 /* =========================================================
    STATE & PERSISTENCE
    ========================================================= */
-const KEYS = { leads:'pcf_leads', deals:'pcf_deals', cashflows:'pcf_cashflows', fund:'pcf_fund', distributions:'pcf_distributions' };
+const KEYS = { leads:'pcf_leads', deals:'pcf_deals', cashflows:'pcf_cashflows', fund:'pcf_fund', distributions:'pcf_distributions', documents:'pcf_documents' };
 let state = {
   leads: JSON.parse(localStorage.getItem(KEYS.leads) || '[]'),
   deals: JSON.parse(localStorage.getItem(KEYS.deals) || '[]'),
   cashflows: JSON.parse(localStorage.getItem(KEYS.cashflows) || '{}'),
   fund: JSON.parse(localStorage.getItem(KEYS.fund) || '{"commitment":0,"drawn":0,"cashAvailable":0,"cashYield":0}'),
   distributions: JSON.parse(localStorage.getItem(KEYS.distributions) || '[]'),
+  documents: JSON.parse(localStorage.getItem(KEYS.documents) || '[]'),
 };
 function save(){
   localStorage.setItem(KEYS.leads, JSON.stringify(state.leads));
@@ -591,6 +628,7 @@ function save(){
   localStorage.setItem(KEYS.cashflows, JSON.stringify(state.cashflows));
   localStorage.setItem(KEYS.fund, JSON.stringify(state.fund));
   localStorage.setItem(KEYS.distributions, JSON.stringify(state.distributions));
+  localStorage.setItem(KEYS.documents, JSON.stringify(state.documents));
 }
 const uid = () => Math.random().toString(36).slice(2,10);
 function toast(msg){
@@ -753,6 +791,7 @@ document.querySelectorAll('nav.tabs button').forEach(b=>{
     document.getElementById(b.dataset.tab).classList.add('active');
     if(b.dataset.tab==='portfolio') renderPortfolio();
     if(b.dataset.tab==='analytics') renderAnalytics();
+    if(b.dataset.tab==='documents') renderDocuments();
   });
 });
 
@@ -1549,7 +1588,8 @@ function importXLSX(e){
         Object.assign(state.cashflows, grouped);
       }
       save(); renderLeads(); renderPortfolio();
-      toast(`Imported ${imported} rows`);
+      saveDocument(file, 'excel-import', { note:`Imported ${imported} rows` });
+      toast(`Imported ${imported} rows · file saved to Documents`);
     } catch(err){ alert('Import failed: '+err.message) }
     e.target.value='';
   };
@@ -1599,7 +1639,8 @@ async function handleTermSheet(ev){
     setIf('about', parsed.about);
     setIf('upfrontFee', parsed.upfrontFee);
     document.querySelector('#dealModal h2 span').textContent = 'Add Deal — Pre-filled from Term Sheet';
-    toast(`Parsed ${Object.values(parsed).filter(v=>v!=null&&v!=='').length} fields — review & save`);
+    saveDocument(file, 'term-sheet', { note: parsed.company ? `Term sheet for ${parsed.company}` : 'Term sheet', linkedCompany: parsed.company || '' });
+    toast(`Parsed ${Object.values(parsed).filter(v=>v!=null&&v!=='').length} fields — file saved to Documents`);
   } catch(err){
     console.error(err);
     alert('Could not read term sheet: '+err.message);
@@ -1726,6 +1767,119 @@ function openDealDetail(id){
   `;
   document.getElementById('dealDetailEditBtn').onclick = () => { closeModal('dealDetailModal'); editDeal(d.id); };
   document.getElementById('dealDetailModal').classList.add('open');
+}
+
+/* =========================================================
+   DOCUMENTS LIBRARY
+   ========================================================= */
+function fileToDataURL(file){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+function fmtBytes(n){
+  if(!n && n!==0) return '—';
+  if(n<1024) return n+' B';
+  if(n<1024*1024) return (n/1024).toFixed(1)+' KB';
+  return (n/1024/1024).toFixed(2)+' MB';
+}
+async function saveDocument(file, kind, meta){
+  meta = meta || {};
+  try{
+    const dataUrl = await fileToDataURL(file);
+    const doc = {
+      id: uid(),
+      name: file.name,
+      type: file.type || '',
+      kind: kind || 'other',           // excel-import | term-sheet | other
+      size: file.size || 0,
+      uploadedAt: new Date().toISOString(),
+      dataUrl,
+      note: meta.note || '',
+      linkedCompany: meta.linkedCompany || '',
+      linkedDealId: meta.linkedDealId || '',
+      linkedLeadId: meta.linkedLeadId || '',
+    };
+    state.documents = state.documents || [];
+    state.documents.unshift(doc);
+    try { save(); }
+    catch(e){
+      // localStorage quota — drop oldest until it fits
+      while(state.documents.length>1){
+        state.documents.pop();
+        try { save(); break; } catch(_){}
+      }
+      toast('Storage full — older documents removed');
+    }
+    if(document.getElementById('documents').classList.contains('active')) renderDocuments();
+  } catch(err){
+    console.error(err);
+    toast('Could not save file: '+err.message);
+  }
+}
+function uploadDocument(ev){
+  const file = ev.target.files[0]; ev.target.value='';
+  if(!file) return;
+  const lower = file.name.toLowerCase();
+  let kind = 'other';
+  if(lower.endsWith('.xlsx')||lower.endsWith('.xls')||lower.endsWith('.csv')) kind = 'excel-import';
+  else if(lower.endsWith('.pdf')||lower.endsWith('.docx')) kind = 'term-sheet';
+  saveDocument(file, kind, {}).then(()=> toast('Saved to Documents'));
+}
+function kindLabel(k){
+  return k==='excel-import' ? 'Excel Import'
+       : k==='term-sheet'   ? 'Term Sheet'
+       : 'Other';
+}
+function renderDocuments(){
+  const tb = document.getElementById('docsTbody'); if(!tb) return;
+  const q = (document.getElementById('docSearch').value||'').toLowerCase();
+  const fk = document.getElementById('docFilterKind').value;
+  const docs = (state.documents||[]).filter(d=>{
+    if(fk && d.kind!==fk) return false;
+    if(q && !((d.name||'').toLowerCase().includes(q) || (d.note||'').toLowerCase().includes(q) || (d.linkedCompany||'').toLowerCase().includes(q))) return false;
+    return true;
+  });
+  if(!docs.length){
+    tb.innerHTML = '<tr><td colspan="8" class="empty">No saved documents yet. Imported Excel files and uploaded term sheets appear here automatically.</td></tr>';
+    return;
+  }
+  tb.innerHTML = docs.map((d,i)=>{
+    const dt = new Date(d.uploadedAt);
+    const dateStr = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    return `<tr>
+      <td>${i+1}</td>
+      <td><b>${esc(d.name)}</b></td>
+      <td><span class="badge">${kindLabel(d.kind)}</span></td>
+      <td>${fmtBytes(d.size)}</td>
+      <td>${esc(d.linkedCompany||'—')}</td>
+      <td>${esc(dateStr)}</td>
+      <td>${esc(d.note||'')}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick="downloadDocument('${d.id}')">⇩ Download</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteDocument('${d.id}')">×</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+function downloadDocument(id){
+  const d = (state.documents||[]).find(x=>x.id===id); if(!d) return;
+  const a = document.createElement('a');
+  a.href = d.dataUrl; a.download = d.name;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function deleteDocument(id){
+  if(!confirm('Delete this document?')) return;
+  state.documents = (state.documents||[]).filter(x=>x.id!==id);
+  save(); renderDocuments(); toast('Document deleted');
+}
+function clearAllDocuments(){
+  if(!(state.documents||[]).length) return;
+  if(!confirm('Delete ALL saved documents? This cannot be undone.')) return;
+  state.documents = []; save(); renderDocuments(); toast('All documents cleared');
 }
 
 /* =========================================================
