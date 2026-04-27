@@ -1009,17 +1009,51 @@ function renderPortfolio(){
   const fundXIRR = xirr(fundFlows);
   const cocMultiple = totalDeployed>0 ? (intRcvd+prinRcvd+outstanding)/totalDeployed : 0;
 
+  // fund-level inputs
+  const f = state.fund || {commitment:0,drawn:0,cashAvailable:0,cashYield:0};
+  const commitment = +f.commitment||0, drawn = +f.drawn||0, cashAvail = +f.cashAvailable||0, cashYield = +f.cashYield||0;
+  const numInvestments = deals.length;
+  const interestPaymentsToDate = deals.reduce((a,d)=>{
+    const cf = state.cashflows[d.id]||[];
+    return a + cf.filter(r=>r.date<=today && r.interest>0).length;
+  },0);
+  const numDistributions = (state.distributions||[]).length + interestPaymentsToDate;
+  // weighted incl. cash
+  const wacInc = (totalInvested+cashAvail)>0 ? (deals.reduce((a,d)=>a+(+d.coupon||0)*investedOf(d),0)+cashYield*cashAvail)/(totalInvested+cashAvail) : 0;
+
   document.getElementById('kpiGrid').innerHTML = `
-    <div class="kpi"><div class="label">Sanctioned Amount</div><div class="value">₹${fmt(totalSanctioned)} Cr</div></div>
-    <div class="kpi"><div class="label">Invested Amount</div><div class="value">₹${fmt(totalInvested)} Cr</div><div class="sub">${totalSanctioned>0?((totalInvested/totalSanctioned)*100).toFixed(1):'0.0'}% of sanctioned</div></div>
-    <div class="kpi tan"><div class="label">Active Deals</div><div class="value">${active}</div><div class="sub">of ${deals.length} total</div></div>
-    <div class="kpi teal"><div class="label">Wtd Avg Coupon</div><div class="value">${pct2(wac)}</div></div>
+    <div class="kpi"><div class="label">Capital Commitment</div><div class="value">₹${fmt(commitment)} Cr</div></div>
+    <div class="kpi tan"><div class="label">Drawn</div><div class="value">₹${fmt(drawn)} Cr</div><div class="sub">${commitment>0?((drawn/commitment)*100).toFixed(1):'0.0'}% of commitment</div></div>
+    <div class="kpi teal"><div class="label">Deployed</div><div class="value">₹${fmt(totalInvested)} Cr</div><div class="sub">${drawn>0?((totalInvested/drawn)*100).toFixed(1):'0.0'}% of drawn</div></div>
+    <div class="kpi green"><div class="label"># Investments</div><div class="value">${numInvestments}</div></div>
+    <div class="kpi"><div class="label"># Income Distributions</div><div class="value">${numDistributions}</div><div class="sub">${(state.distributions||[]).length} logged · ${interestPaymentsToDate} auto</div></div>
+    <div class="kpi tan"><div class="label">Sanctioned</div><div class="value">₹${fmt(totalSanctioned)} Cr</div></div>
+    <div class="kpi teal"><div class="label">Wtd Avg Coupon</div><div class="value">${pct2(wac)}</div><div class="sub">incl. cash: ${pct2(wacInc)}</div></div>
     <div class="kpi green"><div class="label">Fund XIRR</div><div class="value">${pct(fundXIRR)}</div></div>
     <div class="kpi"><div class="label">Interest Received</div><div class="value">₹${fmt(intRcvd)} Cr</div></div>
     <div class="kpi tan"><div class="label">Principal Repaid</div><div class="value">₹${fmt(prinRcvd)} Cr</div></div>
-    
+    <div class="kpi teal"><div class="label">Cash Available</div><div class="value">₹${fmt(cashAvail)} Cr</div><div class="sub">@ ${pct2(cashYield)}</div></div>
     <div class="kpi green"><div class="label">Cash-on-Cash</div><div class="value">${cocMultiple.toFixed(2)}x</div></div>
   `;
+
+  // populate fund inputs
+  ['fundCommitment','fundDrawn','fundCash','fundCashYield'].forEach((id,i)=>{
+    const el = document.getElementById(id);
+    if(el && document.activeElement!==el) el.value = [f.commitment,f.drawn,f.cashAvailable,f.cashYield][i] || '';
+  });
+
+  // distributions table
+  const dt = document.getElementById('distTbody');
+  if(dt){
+    const dists = state.distributions||[];
+    dt.innerHTML = dists.length ? dists.map((x,i)=>`<tr>
+      <td><input type="date" value="${x.date||''}" onchange="updDist(${i},'date',this.value)"></td>
+      <td class="num"><input type="number" step="0.01" value="${x.amount||0}" onchange="updDist(${i},'amount',+this.value)" style="text-align:right"></td>
+      <td><input value="${esc(x.notes||'')}" onchange="updDist(${i},'notes',this.value)"></td>
+      <td><button class="btn btn-danger btn-sm" onclick="delDist(${i})">×</button></td>
+    </tr>`).join('') : '<tr><td colspan="4" class="empty">No distributions logged. Click "+ Add Distribution".</td></tr>';
+  }
+
 
   // table
   const tb = document.getElementById('dealsTbody');
