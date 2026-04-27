@@ -1168,7 +1168,7 @@ function runModel(){
     const g = generateSchedule(m);
     schedule = g.schedule;
   }
-  const r = xirr(flows);
+  const r = (m.xirrOverride!=null && m.xirrOverride!=='' && isFinite(+m.xirrOverride)) ? (+m.xirrOverride/100) : xirr(flows);
   modelResult = {deal:m, flows, schedule, xirr:r};
   displayModelResult();
 }
@@ -1326,7 +1326,7 @@ function exportXLSX(){
   const leadCols=['id','company','sector','dealType','size','tenor','primaryPerson','secondaryPerson','referredBy','referredContact','useOfFunds','stage','structure','notes'];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.leads.map(l=>{const o={};leadCols.forEach(c=>o[c]=l[c]||'');return o})), 'Leads');
   // deals
-  const dealCols=['id','company','sector','dealType','size','coupon','tenor','startDate','repayType','amortFreq','moratorium','upfrontFee','status','rating','security','covenants'];
+  const dealCols=['id','company','sector','dealType','size','coupon','tenor','startDate','repayType','amortFreq','moratorium','upfrontFee','status','rating','security','xirrOverride','covenants'];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.deals.map(d=>{const o={};dealCols.forEach(c=>o[c]=d[c]||'');return o})), 'Deals');
   // cash flows long
   const cf = [];
