@@ -454,6 +454,41 @@
   </div>
 </section>
 
+<!-- ============ DOCUMENTS ============ -->
+<section id="documents" class="section">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px">
+    <div>
+      <h1 class="page-title">Documents</h1>
+      <div class="page-sub">All imported Excel files and uploaded term sheets are saved here</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <label class="btn btn-ghost" style="cursor:pointer">⇧ Save a File
+        <input type="file" accept=".pdf,.docx,.xlsx,.xls,.txt,.csv,.png,.jpg,.jpeg" style="display:none" onchange="uploadDocument(event)">
+      </label>
+      <button class="btn btn-danger" onclick="clearAllDocuments()">Clear All</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <input id="docSearch" placeholder="Search file name or notes..." class="grow" oninput="renderDocuments()">
+    <select id="docFilterKind" onchange="renderDocuments()">
+      <option value="">All Types</option>
+      <option value="excel-import">Excel Import</option>
+      <option value="term-sheet">Term Sheet</option>
+      <option value="other">Other</option>
+    </select>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Sr</th><th>File Name</th><th>Type</th><th>Size</th><th>Linked To</th><th>Uploaded</th><th>Notes</th><th style="text-align:right">Actions</th>
+      </tr></thead>
+      <tbody id="docsTbody"></tbody>
+    </table>
+  </div>
+</section>
+
 </main>
 
 <!-- ============ MODALS ============ -->
