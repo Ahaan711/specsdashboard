@@ -461,10 +461,14 @@
   <h2><span>Add Lead</span><span class="x" onclick="closeModal('leadModal')">×</span></h2>
   <form id="leadForm" onsubmit="saveLead(event)">
     <div class="form-grid">
-      <div class="form-row"><label>Company / Client *</label><input name="company" required></div>
-      <div class="form-row"><label>Sector *</label><select name="sector" required onchange="toggleOther(this,'sectorOther')">
+      <div class="form-row"><label>Company / Client *</label><input name="company" id="leadCompanyInput" required onblur="autoSuggestSector(this.value)"></div>
+      <div class="form-row"><label>Sector * <span id="sectorAiHint" style="font-weight:400;color:var(--muted);font-size:11px"></span></label><select name="sector" id="leadSectorSelect" required onchange="toggleOther(this,'sectorOther')">
         <option>Real Estate</option><option>Infrastructure</option><option>Corporate</option>
-        <option>SME</option><option>Specialty Finance</option><option>Other</option></select></div>
+        <option>SME</option><option>Specialty Finance</option><option>NBFC / Lending</option>
+        <option>Fintech</option><option>Consumer</option><option>Agritech</option>
+        <option>Healthcare</option><option>Logistics</option><option>EdTech</option>
+        <option>Manufacturing</option><option>Technology / SaaS</option><option>Renewable Energy</option>
+        <option>Other</option></select></div>
       <div class="form-row" id="sectorOtherRow" style="display:none"><label>Specify Sector *</label><input name="sectorOther" id="sectorOther" placeholder="Enter custom sector"></div>
       <div class="form-row"><label>Deal Type *</label><select name="dealType" required onchange="toggleOther(this,'dealTypeOther')">
         <option>Single Tranche</option><option>Multiple Tranches</option><option>Other</option></select></div>
