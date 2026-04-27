@@ -9,6 +9,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
 <style>
   :root{
     --navy:#15253F;
@@ -305,7 +308,8 @@
       <div class="page-sub">Live view of all deployed capital</div>
     </div>
     <div style="display:flex;gap:8px">
-      
+      <input type="file" id="tsFile" accept=".pdf,.docx,.txt" style="display:none" onchange="handleTermSheet(event)">
+      <button class="btn btn-ghost" onclick="document.getElementById('tsFile').click()">📄 Upload Term Sheet</button>
       <button class="btn btn-primary" onclick="openDealModal()">+ Add Deal</button>
     </div>
   </div>
@@ -519,6 +523,8 @@
         <div id="tranchesWrap"></div>
         <span class="small-add" onclick="addTrancheRow()">+ Add tranche</span>
       </div>
+      <div class="form-row full"><label>About the Company</label><textarea name="about" placeholder="Brief description of the borrower, business model, sector positioning..."></textarea></div>
+      <div class="form-row full"><label>Security Description</label><textarea name="securityDesc" placeholder="Detailed description of the collateral/security package..."></textarea></div>
       <div class="form-row full"><label>Covenants</label><textarea name="covenants"></textarea></div>
     </div>
     <input type="hidden" name="id">
@@ -543,6 +549,15 @@
       <thead><tr><th>Date</th><th>Period</th><th class="num">Opening</th><th class="num">Principal</th><th class="num">Interest</th><th class="num">Total</th><th class="num">Closing</th></tr></thead>
       <tbody></tbody>
     </table>
+  </div>
+</div></div>
+
+<div id="dealDetailModal" class="modal-bg"><div class="modal" style="max-width:920px">
+  <h2><span id="dealDetailTitle">Deal Details</span><span class="x" onclick="closeModal('dealDetailModal')">×</span></h2>
+  <div id="dealDetailBody"></div>
+  <div class="modal-actions">
+    <button type="button" class="btn btn-ghost" onclick="closeModal('dealDetailModal')">Close</button>
+    <button type="button" class="btn btn-primary" id="dealDetailEditBtn">Edit Deal</button>
   </div>
 </div></div>
 
@@ -1067,7 +1082,7 @@ function renderPortfolio(){
     const matDate = cf.length ? cf[cf.length-1].date : '—';
     const dxirr = (d.xirrOverride!=null && d.xirrOverride!=='' && isFinite(+d.xirrOverride)) ? (+d.xirrOverride/100) : xirr(dealCashflowsForXIRR(d));
     return `<tr>
-      <td><b>${esc(d.company)}</b></td><td>${esc(d.sector)}</td>
+      <td><b><a href="#" onclick="event.preventDefault();openDealDetail('${d.id}')" style="color:var(--text);border-bottom:1px dashed var(--orange)">${esc(d.company)}</a></b></td><td>${esc(d.sector)}</td>
       <td class="num">${fmt(d.size)}</td><td class="num">${fmt(inv)}</td><td class="num">${fmt(outs)}</td>
       <td class="num">${pct2(+d.coupon)}</td><td class="num">${d.tenor}m</td>
       <td>${esc(d.startDate)}</td><td>${matDate}</td>
@@ -1486,6 +1501,178 @@ function importXLSX(e){
     e.target.value='';
   };
   reader.readAsArrayBuffer(file);
+}
+
+/* =========================================================
+   TERM SHEET UPLOAD & PARSING
+   ========================================================= */
+async function handleTermSheet(ev){
+  const file = ev.target.files[0]; ev.target.value='';
+  if(!file) return;
+  toast('Reading term sheet…');
+  try{
+    let text = '';
+    const name = file.name.toLowerCase();
+    if(name.endsWith('.pdf')){
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+      for(let i=1;i<=pdf.numPages;i++){
+        const page = await pdf.getPage(i);
+        const tc = await page.getTextContent();
+        text += tc.items.map(it=>it.str).join(' ')+'\n';
+      }
+    } else if(name.endsWith('.docx')){
+      const buf = await file.arrayBuffer();
+      const r = await mammoth.extractRawText({arrayBuffer:buf});
+      text = r.value;
+    } else {
+      text = await file.text();
+    }
+    const parsed = parseTermSheet(text);
+    openDealModal();
+    const f = document.getElementById('dealForm');
+    const setIf = (k,v) => { if(v!=null && v!=='' && f.elements[k]) f.elements[k].value = v; };
+    setIf('company', parsed.company);
+    setIf('sector', parsed.sector);
+    setIf('size', parsed.size);
+    setIf('coupon', parsed.coupon);
+    setIf('tenor', parsed.tenor);
+    setIf('startDate', parsed.startDate);
+    setIf('moratorium', parsed.moratorium);
+    setIf('repayType', parsed.repayType);
+    setIf('security', parsed.securityType);
+    setIf('securityDesc', parsed.securityDesc);
+    setIf('covenants', parsed.covenants);
+    setIf('about', parsed.about);
+    setIf('upfrontFee', parsed.upfrontFee);
+    document.querySelector('#dealModal h2 span').textContent = 'Add Deal — Pre-filled from Term Sheet';
+    toast(`Parsed ${Object.values(parsed).filter(v=>v!=null&&v!=='').length} fields — review & save`);
+  } catch(err){
+    console.error(err);
+    alert('Could not read term sheet: '+err.message);
+  }
+}
+
+function parseTermSheet(text){
+  const t = text.replace(/\s+/g,' ').replace(/\u00a0/g,' ');
+  const out = {};
+  const grab = (re) => { const m = t.match(re); return m ? m[1].trim() : null; };
+
+  // Company / Borrower / Issuer
+  out.company = grab(/(?:Borrower|Issuer|Company|Client|Investee(?: Company)?)\s*[:\-]\s*([A-Z][A-Za-z0-9 &.,'\-]{2,80}?)(?:\s{2,}|\s(?:Sector|Industry|Amount|Facility|Loan|Issue|Type|Sanctioned|Date)\b|$)/i);
+
+  // Sector / Industry
+  const sec = grab(/(?:Sector|Industry|Business)\s*[:\-]\s*([A-Za-z &/\-]{3,40})/i);
+  if(sec){
+    const known = ['Real Estate','Infrastructure','Corporate','SME','Specialty Finance'];
+    const matched = known.find(k => sec.toLowerCase().includes(k.toLowerCase()));
+    out.sector = matched || sec.trim();
+  }
+
+  // Amount / Facility size — "INR 50 Crore", "Rs. 50 Cr", "₹ 50 crores", "50,00,00,000"
+  let amt = grab(/(?:Facility(?: Amount)?|Sanctioned(?: Amount)?|Issue Size|Loan Amount|Investment(?: Amount)?|Principal|Amount)\s*[:\-]\s*(?:INR|Rs\.?|₹)?\s*([0-9,.]+)\s*(?:cr|crore|crores)/i);
+  if(amt) out.size = parseFloat(amt.replace(/,/g,''));
+  else {
+    amt = grab(/(?:INR|Rs\.?|₹)\s*([0-9,.]+)\s*(?:cr|crore|crores)/i);
+    if(amt) out.size = parseFloat(amt.replace(/,/g,''));
+  }
+
+  // Coupon / Interest rate
+  let cp = grab(/(?:Coupon(?: Rate)?|Interest Rate|Yield|IRR|Rate of Interest|ROI)\s*[:\-]?\s*([0-9.]+)\s*%/i);
+  if(cp) out.coupon = parseFloat(cp);
+
+  // Tenor — "36 months" / "3 years"
+  let tn = grab(/(?:Tenor|Tenure|Term|Maturity Period)\s*[:\-]?\s*([0-9.]+)\s*month/i);
+  if(tn) out.tenor = Math.round(parseFloat(tn));
+  else {
+    tn = grab(/(?:Tenor|Tenure|Term|Maturity Period)\s*[:\-]?\s*([0-9.]+)\s*year/i);
+    if(tn) out.tenor = Math.round(parseFloat(tn)*12);
+  }
+
+  // Moratorium
+  let mr = grab(/(?:Moratorium|Principal Holiday|Grace Period)\s*[:\-]?\s*([0-9]+)\s*month/i);
+  if(mr) out.moratorium = parseInt(mr);
+
+  // Repayment type
+  if(/bullet/i.test(t)) out.repayType = 'Bullet';
+  else if(/partially amortis|partially amortiz/i.test(t)) out.repayType = 'Partially Amortizing';
+  else if(/amortis|amortiz|EMI|equated/i.test(t)) out.repayType = 'Amortizing';
+
+  // Disbursement / Start date — "15 April 2026", "15-04-2026", "2026-04-15"
+  let dt = grab(/(?:Disbursement(?: Date)?|Drawdown|Effective Date|Start Date|Date of Allotment)\s*[:\-]?\s*([0-9]{1,2}[\s\-/][A-Za-z]{3,9}[\s\-/][0-9]{2,4}|[0-9]{1,2}[\-/][0-9]{1,2}[\-/][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})/i);
+  if(dt){
+    const d = new Date(dt);
+    if(!isNaN(d)) out.startDate = d.toISOString().slice(0,10);
+  }
+
+  // Upfront fee
+  let uf = grab(/(?:Upfront Fee|Processing Fee|Arranger Fee)\s*[:\-]?\s*([0-9.]+)\s*%/i);
+  if(uf) out.upfrontFee = parseFloat(uf);
+
+  // Security type (short)
+  out.securityType = grab(/(?:Security Type|Nature of Security)\s*[:\-]\s*([^.;\n]{3,80})/i);
+
+  // Security description (longer block)
+  const secBlock = text.match(/Security\s*[:\-]\s*([\s\S]{30,1200}?)(?=\n\s*(?:Covenants?|Conditions Precedent|Events of Default|Repayment|Coupon|Interest|Tenor|Use of Funds|About|$))/i);
+  if(secBlock) out.securityDesc = secBlock[1].replace(/\s+/g,' ').trim();
+
+  // Covenants block
+  const covBlock = text.match(/Covenants?\s*[:\-]\s*([\s\S]{30,2000}?)(?=\n\s*(?:Events of Default|Conditions Precedent|Security|Repayment|Representations|Governing Law|$))/i);
+  if(covBlock) out.covenants = covBlock[1].replace(/\s+/g,' ').trim();
+
+  // About the company
+  const aboutBlock = text.match(/(?:About(?: the)?(?: Company| Borrower| Issuer)?|Company Overview|Business Overview|Borrower Profile|Company Background)\s*[:\-]?\s*([\s\S]{30,2000}?)(?=\n\s*(?:Sector|Industry|Facility|Coupon|Security|Tenor|Amount|Use of Funds|Covenants?|$))/i);
+  if(aboutBlock) out.about = aboutBlock[1].replace(/\s+/g,' ').trim();
+
+  return out;
+}
+
+/* =========================================================
+   DEAL DETAIL VIEW
+   ========================================================= */
+function openDealDetail(id){
+  const d = state.deals.find(x=>x.id===id); if(!d) return;
+  document.getElementById('dealDetailTitle').textContent = `${d.company} — Deal Details`;
+  const cf = state.cashflows[d.id]||[];
+  const today = new Date().toISOString().slice(0,10);
+  const repaid = cf.filter(r=>r.date<=today).reduce((a,r)=>a+r.principal,0);
+  const inv = (d.invested!=null && d.invested!=='' && isFinite(+d.invested)) ? +d.invested : (+d.size||0);
+  const outs = inv-repaid;
+  const matDate = cf.length ? cf[cf.length-1].date : '—';
+  const dxirr = (d.xirrOverride!=null && d.xirrOverride!=='' && isFinite(+d.xirrOverride)) ? (+d.xirrOverride/100) : xirr(dealCashflowsForXIRR(d));
+  const fact = (l,v) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text-dim);font-size:12px">${l}</span><span style="font-weight:600;font-size:13px">${v}</span></div>`;
+  const block = (title, body) => `<div class="card" style="margin-top:12px"><h3>${title}</h3><div style="font-size:13px;line-height:1.7;color:var(--text);white-space:pre-wrap">${body && body.toString().trim() ? esc(body) : '<span style="color:var(--text-dim);font-style:italic">Not provided. Click Edit Deal to add.</span>'}</div></div>`;
+  document.getElementById('dealDetailBody').innerHTML = `
+    <div class="row-2">
+      <div class="card">
+        <h3>Key Facts</h3>
+        ${fact('Sector', esc(d.sector||'—'))}
+        ${fact('Deal Type', esc(d.dealType||'—'))}
+        ${fact('Sanctioned', '₹'+fmt(d.size)+' Cr')}
+        ${fact('Invested', '₹'+fmt(inv)+' Cr')}
+        ${fact('Outstanding', '₹'+fmt(outs)+' Cr')}
+        ${fact('Coupon', pct2(+d.coupon))}
+        ${fact('Tenor', (d.tenor||'—')+' months')}
+        ${fact('Moratorium', (d.moratorium||0)+' months')}
+        ${fact('Repayment', esc(d.repayType||'—'))}
+        ${fact('Status', esc(d.status||'—'))}
+      </div>
+      <div class="card">
+        <h3>Returns & Dates</h3>
+        ${fact('Disbursement', esc(d.startDate||'—'))}
+        ${fact('Maturity', esc(matDate))}
+        ${fact('XIRR', '<span style="color:var(--orange)">'+pct(dxirr)+'</span>')}
+        ${fact('Rating', esc(d.rating||'Unrated'))}
+        ${fact('Upfront Fee', (d.upfrontFee||0)+'%')}
+        ${fact('Security Type', esc(d.security||'—'))}
+      </div>
+    </div>
+    ${block('About the Company', d.about)}
+    ${block('Security', d.securityDesc || d.security)}
+    ${block('Covenants', d.covenants)}
+  `;
+  document.getElementById('dealDetailEditBtn').onclick = () => { closeModal('dealDetailModal'); editDeal(d.id); };
+  document.getElementById('dealDetailModal').classList.add('open');
 }
 
 /* =========================================================
