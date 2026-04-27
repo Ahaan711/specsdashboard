@@ -674,7 +674,10 @@ function dealCashflowsForXIRR(deal){
       totalDisb += +t.amount;
     }
   }
+  const todayStr = new Date().toISOString().slice(0,10);
   for(const r of g.schedule){
+    // Defaulted deals: only count flows already received (date <= today)
+    if(deal.status === 'Defaulted' && r.date > todayStr) continue;
     flows.push({date:new Date(r.date), amount: r.total});
   }
   return flows;
@@ -913,10 +916,21 @@ function renderPortfolio(){
   let intRcvd = 0, prinRcvd = 0, outstanding = 0;
   deals.forEach(d=>{
     const cf = state.cashflows[d.id]||[];
+    // Defaulted/Restructured deals don't accrue assumed inflows past today
+    const cutoff = (d.status==='Defaulted' || d.status==='Fully Repaid') ? '0000-00-00' : today;
     cf.forEach(r=>{
-      if(r.date <= today){ intRcvd += r.interest; prinRcvd += r.principal; }
+      if(r.date <= cutoff){ intRcvd += r.interest; prinRcvd += r.principal; }
     });
-    outstanding += (+d.size) - cf.filter(r=>r.date<=today).reduce((a,r)=>a+r.principal,0);
+    if(d.status === 'Fully Repaid'){
+      // fully repaid: outstanding is 0
+    } else if(d.status === 'Defaulted'){
+      // assume the latest closing balance at default = current outstanding (no further inflows)
+      const lastPaid = cf.filter(r=>r.date<=today);
+      outstanding += lastPaid.length ? lastPaid[lastPaid.length-1].closing : (+d.size||0);
+    } else {
+      const repaid = cf.filter(r=>r.date<=today).reduce((a,r)=>a+r.principal,0);
+      outstanding += Math.max(0, (+d.size||0) - repaid);
+    }
   });
   // fund xirr
   const fundFlows = [];
