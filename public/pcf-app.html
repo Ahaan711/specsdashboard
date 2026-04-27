@@ -791,6 +791,7 @@ document.querySelectorAll('nav.tabs button').forEach(b=>{
     document.getElementById(b.dataset.tab).classList.add('active');
     if(b.dataset.tab==='portfolio') renderPortfolio();
     if(b.dataset.tab==='analytics') renderAnalytics();
+    if(b.dataset.tab==='documents') renderDocuments();
   });
 });
 
