@@ -256,9 +256,8 @@
     <input id="leadSearch" placeholder="Search company or notes..." class="grow" oninput="renderLeads()">
     <select id="leadFilterStage" onchange="renderLeads()">
       <option value="">Status</option>
-      <option>Active</option><option>Passive</option><option>Lost</option><option>Rejected</option>
-      <option>Prospect</option><option>Under Review</option><option>Term Sheet</option>
-      <option>Due Diligence</option><option>Credit Approved</option><option>Closed</option>
+      <option>Active</option><option>Passive</option><option>Rejected</option>
+      <option>Lost</option><option>Completed</option>
     </select>
     <select id="leadFilterSector" onchange="renderLeads()">
       <option value="">All Sectors</option>
@@ -482,9 +481,8 @@
       <div class="form-row"><label>Referrer Contact (phone / email)</label><input name="referredContact" placeholder="+91… or name@firm.com"></div>
       <div class="form-row full"><label>Use of Funds</label><input name="useOfFunds" placeholder="e.g. Working capital, capex, refinancing"></div>
       <div class="form-row"><label>Status *</label><select name="stage" required>
-        <option>Active</option><option>Passive</option><option>Lost</option><option>Rejected</option>
-        <option>Prospect</option><option>Under Review</option><option>Term Sheet</option>
-        <option>Due Diligence</option><option>Credit Approved</option><option>Closed</option></select></div>
+        <option>Active</option><option>Passive</option><option>Rejected</option>
+        <option>Lost</option><option>Completed</option></select></div>
       <div class="form-row"><label>Potential Structure</label><input name="structure" placeholder="e.g. NCD, Term Loan"></div>
       <div class="form-row full"><label>Current Status / Remarks</label><textarea name="notes"></textarea></div>
     </div>
@@ -807,12 +805,12 @@ function renderLeads(){
         <td><span class="${stageClass(l.stage)}">${esc(l.stage)}</span></td>
         <td class="actions">
           <button class="btn btn-ghost btn-sm" onclick="editLead('${l.id}')">Edit</button>
-          ${l.stage==='Closed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${l.id}')">→ Deal</button>`:''}
+          ${l.stage==='Completed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${l.id}')">→ Deal</button>`:''}
           <button class="btn btn-danger btn-sm" onclick="delLead('${l.id}')">×</button>
         </td>
       </tr>`}).join('');
   } else {
-    const stages = ['Prospect','Under Review','Term Sheet','Due Diligence','Credit Approved','Closed','Rejected'];
+    const stages = ['Active','Passive','Rejected','Lost','Completed'];
     document.getElementById('kanban').innerHTML = stages.map(s=>{
       const items = ls.filter(l=>l.stage===s);
       return `<div class="kcol"><h4>${s} <span>${items.length}</span></h4>
@@ -824,7 +822,7 @@ function renderLeads(){
     }).join('');
   }
   // summary
-  const stages = ['Prospect','Under Review','Term Sheet','Due Diligence','Credit Approved','Closed','Rejected'];
+  const stages = ['Active','Passive','Rejected','Lost','Completed'];
   const total = ls.reduce((a,b)=>a+(+b.size||0),0);
   document.getElementById('pipelineSummary').innerHTML =
     stages.map(s=>`<div><span class="${stageClass(s)}">${s}</span> <b>${ls.filter(l=>l.stage===s).length}</b></div>`).join('') +
