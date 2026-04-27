@@ -885,6 +885,9 @@ function openLeadModal(){
   document.getElementById('leadForm').id.value = '';
   document.getElementById('sectorOtherRow').style.display='none';
   document.getElementById('dealTypeOtherRow').style.display='none';
+  const sel = document.getElementById('leadSectorSelect');
+  if(sel){ sel.dataset.userTouched=''; sel.addEventListener('change', ()=>{ sel.dataset.userTouched='1'; }, { once:true }); }
+  const hint = document.getElementById('sectorAiHint'); if(hint) hint.textContent='';
   document.querySelector('#leadModal h2 span').textContent = 'Add Lead';
   document.getElementById('leadModal').classList.add('open');
 }
