@@ -805,7 +805,7 @@ function renderLeads(){
         <td><span class="${stageClass(l.stage)}">${esc(l.stage)}</span></td>
         <td class="actions">
           <button class="btn btn-ghost btn-sm" onclick="editLead('${l.id}')">Edit</button>
-          ${l.stage==='Closed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${l.id}')">→ Deal</button>`:''}
+          ${l.stage==='Completed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${l.id}')">→ Deal</button>`:''}
           <button class="btn btn-danger btn-sm" onclick="delLead('${l.id}')">×</button>
         </td>
       </tr>`}).join('');
