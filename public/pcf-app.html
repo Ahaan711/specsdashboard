@@ -822,7 +822,7 @@ function renderLeads(){
     }).join('');
   }
   // summary
-  const stages = ['Prospect','Under Review','Term Sheet','Due Diligence','Credit Approved','Closed','Rejected'];
+  const stages = ['Active','Passive','Rejected','Lost','Completed'];
   const total = ls.reduce((a,b)=>a+(+b.size||0),0);
   document.getElementById('pipelineSummary').innerHTML =
     stages.map(s=>`<div><span class="${stageClass(s)}">${s}</span> <b>${ls.filter(l=>l.stage===s).length}</b></div>`).join('') +
