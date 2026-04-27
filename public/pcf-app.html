@@ -260,9 +260,6 @@
       <option>Real Estate</option><option>Infrastructure</option><option>Corporate</option>
       <option>SME</option><option>Specialty Finance</option><option>Other</option>
     </select>
-    <select id="leadFilterPriority" onchange="renderLeads()">
-      <option value="">All Priority</option><option>High</option><option>Medium</option><option>Low</option>
-    </select>
     <select id="leadFilterDealType" onchange="renderLeads()">
       <option value="">All Deal Types</option>
       <option>Single Tranche</option><option>Multiple Tranches</option><option>Other</option>
@@ -279,9 +276,9 @@
         <thead><tr>
           <th>Sr</th><th>Company</th><th>Sector</th><th>Deal Type</th>
           <th>Primary</th><th>Referred By</th>
-          <th class="num">Size (₹Cr)</th><th class="num">Tenor (yrs)</th><th class="num">Coupon</th>
+          <th class="num">Size (₹Cr)</th><th class="num">Tenor (yrs)</th>
           <th>Use of Funds</th>
-          <th>Status</th><th>Close Date</th><th>Priority</th><th>Actions</th>
+          <th>Status</th><th>Actions</th>
         </tr></thead>
         <tbody id="leadsTbody"></tbody>
       </table>
@@ -452,9 +449,6 @@
         <option>Prospect</option><option>Under Review</option><option>Term Sheet</option>
         <option>Due Diligence</option><option>Credit Approved</option><option>Closed</option></select></div>
       <div class="form-row"><label>Potential Structure</label><input name="structure" placeholder="e.g. NCD, Term Loan"></div>
-      <div class="form-row"><label>Expected Close Date</label><input type="date" name="closeDate"></div>
-      <div class="form-row"><label>Priority</label><select name="priority">
-        <option>High</option><option selected>Medium</option><option>Low</option></select></div>
       <div class="form-row full"><label>Current Status / Remarks</label><textarea name="notes"></textarea></div>
     </div>
     <input type="hidden" name="id">
@@ -725,13 +719,11 @@ function filterLeads(){
   const q = document.getElementById('leadSearch').value.toLowerCase();
   const fs = document.getElementById('leadFilterStage').value;
   const fsec = document.getElementById('leadFilterSector').value;
-  const fp = document.getElementById('leadFilterPriority').value;
   const fdt = document.getElementById('leadFilterDealType').value;
   return state.leads.filter(l=>{
     if(q && !((l.company||'').toLowerCase().includes(q) || (l.notes||'').toLowerCase().includes(q))) return false;
     if(fs && l.stage!==fs) return false;
     if(fsec && l.sector!==fsec) return false;
-    if(fp && l.priority!==fp) return false;
     if(fdt && l.dealType!==fdt) return false;
     return true;
   });
@@ -740,7 +732,7 @@ function renderLeads(){
   const ls = filterLeads();
   if(leadView==='table'){
     const tb = document.getElementById('leadsTbody');
-    if(!ls.length){tb.innerHTML='<tr><td colspan="14" class="empty">No leads. Click "+ Add Lead" to get started.</td></tr>'}
+    if(!ls.length){tb.innerHTML='<tr><td colspan="11" class="empty">No leads. Click "+ Add Lead" to get started.</td></tr>'}
     else tb.innerHTML = ls.map((l,i)=>{
       const refLine = l.referredBy ? `<b>${esc(l.referredBy)}</b>${l.referredContact?`<div style="font-size:11px;color:var(--text-dim)">${esc(l.referredContact)}</div>`:''}` : '—';
       return `
@@ -753,11 +745,8 @@ function renderLeads(){
         <td>${refLine}</td>
         <td class="num">${fmt(l.size)}</td>
         <td class="num">${l.tenor?(+l.tenor).toFixed(2):'—'}</td>
-        <td class="num">${l.coupon?pct2(+l.coupon):'—'}</td>
         <td>${esc(l.useOfFunds||'—')}</td>
         <td><span class="${stageClass(l.stage)}">${esc(l.stage)}</span></td>
-        <td>${esc(l.closeDate||'—')}</td>
-        <td class="pri-${l.priority}">${esc(l.priority||'')}</td>
         <td class="actions">
           <button class="btn btn-ghost btn-sm" onclick="editLead('${l.id}')">Edit</button>
           ${l.stage==='Closed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${l.id}')">→ Deal</button>`:''}
@@ -771,7 +760,7 @@ function renderLeads(){
       return `<div class="kcol"><h4>${s} <span>${items.length}</span></h4>
         ${items.map(l=>`<div class="kcard" onclick="editLead('${l.id}')">
           <div class="name">${esc(l.company)}</div>
-          <div class="meta"><span>₹${fmt(l.size)} Cr</span><span>${pct2(+l.coupon)}</span></div>
+          <div class="meta"><span>₹${fmt(l.size)} Cr</span>${l.tenor?`<span>${(+l.tenor).toFixed(2)} yrs</span>`:''}</div>
         </div>`).join('')}
       </div>`;
     }).join('');
@@ -1326,13 +1315,13 @@ function downloadCSV(rows, name){
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
 }
 function exportLeadsCSV(){
-  const cols=['company','sector','dealType','size','coupon','tenor','source','stage','closeDate','assignedTo','priority','notes'];
+  const cols=['company','sector','dealType','size','tenor','primaryPerson','secondaryPerson','referredBy','referredContact','useOfFunds','stage','structure','notes'];
   downloadCSV([cols, ...state.leads.map(l=>cols.map(c=>l[c]||''))],'leads.csv');
 }
 function exportXLSX(){
   const wb = XLSX.utils.book_new();
   // leads
-  const leadCols=['id','company','sector','dealType','size','coupon','tenor','source','stage','closeDate','assignedTo','priority','notes'];
+  const leadCols=['id','company','sector','dealType','size','tenor','primaryPerson','secondaryPerson','referredBy','referredContact','useOfFunds','stage','structure','notes'];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.leads.map(l=>{const o={};leadCols.forEach(c=>o[c]=l[c]||'');return o})), 'Leads');
   // deals
   const dealCols=['id','company','sector','dealType','size','coupon','tenor','startDate','repayType','amortFreq','moratorium','upfrontFee','status','rating','security','covenants'];
