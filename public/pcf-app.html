@@ -488,6 +488,7 @@
         <option>AAA</option><option>AA</option><option>A</option><option>BBB</option><option>BB</option>
         <option>B</option><option>CCC</option><option>CC</option><option>C</option><option>D</option><option selected>Unrated</option></select></div>
       <div class="form-row"><label>Security Type</label><input name="security"></div>
+      <div class="form-row"><label>XIRR Override (% p.a.)</label><input type="number" step="0.01" name="xirrOverride" placeholder="Optional — leave blank to auto-calculate"></div>
       <div class="form-row full"><label>Disbursement Tranches (optional, leave blank for single disbursement on Start Date)</label>
         <div id="tranchesWrap"></div>
         <span class="small-add" onclick="addTrancheRow()">+ Add tranche</span>
@@ -973,6 +974,7 @@ function renderPortfolio(){
   deals.forEach(d=>{
     fundFlows.push(...dealCashflowsForXIRR(d));
   });
+  // fund xirr — if every deal has an override, use weighted avg; else compute from flows (using overrides as substitute flows is non-trivial, so prefer real flows)
   const fundXIRR = xirr(fundFlows);
   const cocMultiple = totalDeployed>0 ? (intRcvd+prinRcvd+outstanding)/totalDeployed : 0;
 
@@ -995,7 +997,7 @@ function renderPortfolio(){
     const repaid = cf.filter(r=>r.date<=today).reduce((a,r)=>a+r.principal,0);
     const outs = (+d.size)-repaid;
     const matDate = cf.length ? cf[cf.length-1].date : '—';
-    const dxirr = xirr(dealCashflowsForXIRR(d));
+    const dxirr = (d.xirrOverride!=null && d.xirrOverride!=='' && isFinite(+d.xirrOverride)) ? (+d.xirrOverride/100) : xirr(dealCashflowsForXIRR(d));
     return `<tr>
       <td><b>${esc(d.company)}</b></td><td>${esc(d.sector)}</td>
       <td class="num">${fmt(d.size)}</td><td class="num">${fmt(outs)}</td>
@@ -1062,7 +1064,7 @@ function drawPortfolioCharts(){
   chart('chartDealType',{type:'doughnut',data:{labels:Object.keys(byDT),datasets:[{data:Object.values(byDT),backgroundColor:palette}]},options:{...chartDefaults,scales:{}}});
 
   // Deal XIRR
-  const dx = state.deals.map(d=>({n:d.company,x:xirr(dealCashflowsForXIRR(d))})).filter(x=>isFinite(x.x));
+  const dx = state.deals.map(d=>({n:d.company,x:(d.xirrOverride!=null && d.xirrOverride!=='' && isFinite(+d.xirrOverride)) ? (+d.xirrOverride/100) : xirr(dealCashflowsForXIRR(d))})).filter(x=>isFinite(x.x));
   chart('chartDealXIRR',{type:'bar',data:{labels:dx.map(x=>x.n),datasets:[{label:'XIRR %',data:dx.map(x=>x.x*100),backgroundColor:'#FF7553'}]},options:chartDefaults});
 }
 
