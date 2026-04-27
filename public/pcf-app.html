@@ -810,7 +810,7 @@ function renderLeads(){
         </td>
       </tr>`}).join('');
   } else {
-    const stages = ['Prospect','Under Review','Term Sheet','Due Diligence','Credit Approved','Closed','Rejected'];
+    const stages = ['Active','Passive','Rejected','Lost','Completed'];
     document.getElementById('kanban').innerHTML = stages.map(s=>{
       const items = ls.filter(l=>l.stage===s);
       return `<div class="kcol"><h4>${s} <span>${items.length}</span></h4>
