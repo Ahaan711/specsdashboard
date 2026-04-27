@@ -1,0 +1,1345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spark Asia Impact — SpECS Fund Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --navy:#15253F;
+    --navy-2:#0F1B2E;
+    --navy-3:#1C3151;
+    --teal:#284F70;
+    --orange:#FF7553;
+    --tan:#DAA06D;
+    --sand:#C2B280;
+    --green:#7D8590;
+    --green-pos:#4ade80;
+    --red-neg:#f87171;
+    --amber:#fbbf24;
+    --text:#E6EDF6;
+    --text-dim:#9FB1C7;
+    --border:rgba(255,255,255,.08);
+    --card:#1A2B47;
+    --card-2:#22385A;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    background:var(--navy-2);color:var(--text);font-size:14px;line-height:1.5;
+    min-width:1024px;
+  }
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input,select,textarea{font-family:inherit;font-size:14px}
+  a{color:var(--orange);text-decoration:none}
+
+  /* ---------- HEADER ---------- */
+  header.topbar{
+    background:var(--navy);border-bottom:1px solid var(--border);
+    padding:14px 28px;display:flex;align-items:center;gap:24px;position:sticky;top:0;z-index:50;
+  }
+  .logo{display:flex;align-items:center;gap:14px}
+  .logo svg{height:38px;width:auto}
+  .logo-text{display:flex;flex-direction:column;line-height:1.1}
+  .logo-text .l1{font-weight:700;font-size:18px;letter-spacing:.3px}
+  .logo-text .l2{font-size:11px;color:var(--text-dim);letter-spacing:.5px}
+  .fund-pill{
+    margin-left:auto;background:#fff;color:var(--navy);
+    padding:8px 22px 8px 36px;clip-path:polygon(20px 0,100% 0,100% 100%,0 100%);
+    font-weight:700;font-size:14px;
+  }
+  .fund-pill .accent{color:var(--orange)}
+  .fund-pill small{display:block;font-size:11px;font-weight:500;color:var(--teal);margin-top:2px}
+
+  nav.tabs{
+    background:var(--navy);border-bottom:1px solid var(--border);
+    padding:0 28px;display:flex;gap:4px;position:sticky;top:68px;z-index:49;
+  }
+  nav.tabs button{
+    padding:14px 20px;font-size:13px;font-weight:600;color:var(--text-dim);
+    border-bottom:3px solid transparent;transition:all .15s;letter-spacing:.3px;
+  }
+  nav.tabs button:hover{color:var(--text)}
+  nav.tabs button.active{color:var(--orange);border-bottom-color:var(--orange)}
+
+  main{padding:24px 28px 60px}
+  .section{display:none}
+  .section.active{display:block}
+
+  h1.page-title{font-size:22px;font-weight:700;margin-bottom:4px}
+  .page-sub{color:var(--text-dim);font-size:13px;margin-bottom:20px}
+
+  /* ---------- CARDS ---------- */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px}
+  .card h3{font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px}
+
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+  .kpi{background:linear-gradient(135deg,var(--card) 0%,var(--card-2) 100%);
+    border:1px solid var(--border);border-radius:10px;padding:16px;position:relative;overflow:hidden}
+  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--orange)}
+  .kpi.green::before{background:var(--green-pos)}
+  .kpi.tan::before{background:var(--tan)}
+  .kpi.teal::before{background:var(--teal)}
+  .kpi .label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:6px}
+  .kpi .value{font-size:24px;font-weight:700;color:var(--text)}
+  .kpi .sub{font-size:11px;color:var(--text-dim);margin-top:2px}
+
+  /* ---------- BUTTONS ---------- */
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:6px;font-weight:600;font-size:13px;transition:all .15s;border:1px solid transparent}
+  .btn-primary{background:var(--orange);color:#fff}
+  .btn-primary:hover{background:#ff8e72}
+  .btn-ghost{background:transparent;border-color:var(--border);color:var(--text-dim)}
+  .btn-ghost:hover{color:var(--text);border-color:var(--orange)}
+  .btn-sm{padding:5px 10px;font-size:12px}
+  .btn-danger{background:transparent;color:var(--red-neg);border:1px solid var(--red-neg)}
+  .btn-danger:hover{background:var(--red-neg);color:#fff}
+
+  /* ---------- TABLE ---------- */
+  .table-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--border)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead{background:var(--navy)}
+  th{text-align:left;padding:11px 12px;font-weight:600;color:var(--text-dim);
+    text-transform:uppercase;font-size:11px;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+  td{padding:11px 12px;border-bottom:1px solid var(--border);color:var(--text)}
+  tbody tr:hover{background:rgba(255,117,83,.04)}
+  tbody tr:last-child td{border-bottom:none}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  td.actions{white-space:nowrap}
+  .badge{display:inline-block;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:600;letter-spacing:.3px}
+  .stage-Prospect{background:rgba(125,133,144,.2);color:#b8c2cf}
+  .stage-Under{background:rgba(40,79,112,.4);color:#9bc1e0}
+  .stage-Term{background:rgba(218,160,109,.25);color:var(--tan)}
+  .stage-Due{background:rgba(194,178,128,.25);color:var(--sand)}
+  .stage-Credit{background:rgba(255,117,83,.2);color:var(--orange)}
+  .stage-Closed{background:rgba(74,222,128,.2);color:var(--green-pos)}
+  .stage-Rejected{background:rgba(248,113,113,.2);color:var(--red-neg)}
+  .pri-High{color:var(--red-neg);font-weight:700}
+  .pri-Medium{color:var(--amber);font-weight:600}
+  .pri-Low{color:var(--text-dim)}
+
+  /* ---------- TOOLBAR ---------- */
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+  .toolbar input,.toolbar select{
+    background:var(--navy);border:1px solid var(--border);color:var(--text);
+    padding:8px 12px;border-radius:6px;outline:none;
+  }
+  .toolbar input:focus,.toolbar select:focus{border-color:var(--orange)}
+  .toolbar .grow{flex:1}
+  .seg{display:inline-flex;background:var(--navy);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+  .seg button{padding:7px 14px;font-size:12px;font-weight:600;color:var(--text-dim)}
+  .seg button.active{background:var(--orange);color:#fff}
+
+  /* ---------- KANBAN ---------- */
+  .kanban{display:grid;grid-template-columns:repeat(7,minmax(180px,1fr));gap:10px;overflow-x:auto}
+  .kcol{background:var(--navy);border:1px solid var(--border);border-radius:8px;padding:10px;min-height:200px}
+  .kcol h4{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;margin-bottom:10px;display:flex;justify-content:space-between}
+  .kcard{background:var(--card-2);border-radius:6px;padding:10px;margin-bottom:8px;cursor:pointer;border-left:3px solid var(--orange)}
+  .kcard:hover{background:#2a4368}
+  .kcard .name{font-weight:600;font-size:13px;margin-bottom:4px}
+  .kcard .meta{font-size:11px;color:var(--text-dim);display:flex;justify-content:space-between}
+
+  /* ---------- MODAL ---------- */
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto}
+  .modal-bg.open{display:flex}
+  .modal{background:var(--card);border:1px solid var(--border);border-radius:10px;width:100%;max-width:760px;padding:24px}
+  .modal h2{font-size:18px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center}
+  .modal h2 .x{font-size:22px;color:var(--text-dim);cursor:pointer}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .form-row{display:flex;flex-direction:column;gap:5px}
+  .form-row.full{grid-column:1/-1}
+  .form-row label{font-size:12px;color:var(--text-dim);font-weight:600}
+  .form-row input,.form-row select,.form-row textarea{
+    background:var(--navy);border:1px solid var(--border);color:var(--text);
+    padding:9px 12px;border-radius:6px;outline:none;
+  }
+  .form-row input:focus,.form-row select:focus,.form-row textarea:focus{border-color:var(--orange)}
+  .form-row textarea{resize:vertical;min-height:70px}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+  .err{color:var(--red-neg);font-size:12px;margin-top:4px}
+
+  /* ---------- CHARTS ---------- */
+  .chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:18px}
+  .chart-grid .card{min-height:300px}
+  .chart-wrap{position:relative;height:260px}
+
+  /* tranches / cashflow rows */
+  .tranche-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:6px;align-items:center}
+  .small-add{font-size:12px;color:var(--orange);cursor:pointer;font-weight:600;margin-top:4px;display:inline-block}
+
+  /* big xirr display */
+  .xirr-big{font-size:64px;font-weight:800;letter-spacing:-1px;text-align:center;padding:30px 0}
+  .xirr-low{color:var(--red-neg)}
+  .xirr-mid{color:var(--amber)}
+  .xirr-high{color:var(--green-pos)}
+
+  /* mode tabs */
+  .modetabs{display:flex;gap:0;margin-bottom:18px;border-bottom:1px solid var(--border)}
+  .modetabs button{padding:10px 20px;font-weight:600;color:var(--text-dim);border-bottom:2px solid transparent}
+  .modetabs button.active{color:var(--orange);border-bottom-color:var(--orange)}
+
+  /* expandable cashflow */
+  .cf-row{cursor:pointer}
+  .cf-detail{background:var(--navy);padding:14px;font-size:12px}
+  .cf-detail table{font-size:12px}
+  .cf-overdue{color:var(--red-neg);font-weight:600}
+
+  /* utility */
+  .row-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .row-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .empty{text-align:center;color:var(--text-dim);padding:50px 20px;font-style:italic}
+  .pos{color:var(--green-pos);font-weight:600}
+  .neg{color:var(--red-neg);font-weight:600}
+
+  /* toast */
+  .toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--orange);
+    padding:12px 18px;border-radius:8px;z-index:200;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.4);
+    transform:translateY(100px);opacity:0;transition:all .3s}
+  .toast.show{transform:translateY(0);opacity:1}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo">
+    <svg viewBox="0 0 200 50" xmlns="http://www.w3.org/2000/svg">
+      <text x="0" y="32" font-family="Inter" font-size="26" font-weight="700" fill="#ffffff">Spark Asia Impact</text>
+      <g fill="#FF7553" transform="translate(180,4)">
+        <path d="M5 0 L6 4 L10 5 L6 6 L5 10 L4 6 L0 5 L4 4 Z"/>
+      </g>
+      <text x="0" y="46" font-family="Inter" font-size="9" font-weight="500" fill="#9FB1C7" letter-spacing="1">ALTERNATIVE ASSET MANAGEMENT</text>
+    </svg>
+  </div>
+  <div class="fund-pill">
+    <span class="accent">Sp</span>ECS <span style="color:var(--navy)">FUND</span>
+    <small>&lt; <span style="color:var(--orange)">S</span>park <span style="color:var(--orange)">E</span>quitized <span style="color:var(--orange)">C</span>redit <span style="color:var(--orange)">S</span>olutions Fund &gt;</small>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button data-tab="leads" class="active">Leads Pipeline</button>
+  <button data-tab="portfolio">Portfolio Dashboard</button>
+  <button data-tab="modeler">Deal Modeler & XIRR</button>
+  <button data-tab="analytics">Fund Analytics</button>
+</nav>
+
+<main>
+
+<!-- ============ LEADS ============ -->
+<section id="leads" class="section active">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px">
+    <div>
+      <h1 class="page-title">Leads Pipeline</h1>
+      <div class="page-sub">Track prospective deals from sourcing to closing</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="exportLeadsCSV()">⇩ CSV</button>
+      <button class="btn btn-ghost" onclick="exportXLSX()">⇩ Excel</button>
+      <label class="btn btn-ghost" style="cursor:pointer">⇧ Import Excel
+        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importXLSX(event)">
+      </label>
+      <button class="btn btn-primary" onclick="openLeadModal()">+ Add Lead</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <input id="leadSearch" placeholder="Search company or notes..." class="grow" oninput="renderLeads()">
+    <select id="leadFilterStage" onchange="renderLeads()">
+      <option value="">All Stages</option>
+      <option>Prospect</option><option>Under Review</option><option>Term Sheet</option>
+      <option>Due Diligence</option><option>Credit Approved</option><option>Closed</option><option>Rejected</option>
+    </select>
+    <select id="leadFilterSector" onchange="renderLeads()">
+      <option value="">All Sectors</option>
+      <option>Real Estate</option><option>Infrastructure</option><option>Corporate</option>
+      <option>SME</option><option>Specialty Finance</option><option>Other</option>
+    </select>
+    <select id="leadFilterPriority" onchange="renderLeads()">
+      <option value="">All Priority</option><option>High</option><option>Medium</option><option>Low</option>
+    </select>
+    <select id="leadFilterDealType" onchange="renderLeads()">
+      <option value="">All Deal Types</option>
+      <option>Senior Secured</option><option>Mezzanine</option><option>Unitranche</option>
+      <option>Second Lien</option><option>Subordinated</option>
+    </select>
+    <div class="seg">
+      <button id="viewTable" class="active" onclick="setLeadView('table')">Table</button>
+      <button id="viewKanban" onclick="setLeadView('kanban')">Kanban</button>
+    </div>
+  </div>
+
+  <div id="leadsTableView">
+    <div class="table-wrap">
+      <table id="leadsTable">
+        <thead><tr>
+          <th>Company</th><th>Sector</th><th>Deal Type</th>
+          <th class="num">Size (₹Cr)</th><th class="num">Coupon</th>
+          <th>Stage</th><th>Close Date</th><th>Priority</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="leadsTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="leadsKanbanView" style="display:none">
+    <div class="kanban" id="kanban"></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>Pipeline Summary</h3>
+    <div id="pipelineSummary" style="display:flex;flex-wrap:wrap;gap:18px;font-size:13px"></div>
+  </div>
+</section>
+
+<!-- ============ PORTFOLIO ============ -->
+<section id="portfolio" class="section">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px">
+    <div>
+      <h1 class="page-title">Portfolio Dashboard</h1>
+      <div class="page-sub">Live view of all deployed capital</div>
+    </div>
+    <button class="btn btn-primary" onclick="openDealModal()">+ Add Deal</button>
+  </div>
+
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3>Deals</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Deal Name</th><th>Sector</th>
+          <th class="num">Disbursed</th><th class="num">Outstanding</th>
+          <th class="num">Coupon</th><th class="num">Tenor</th>
+          <th>Start</th><th>Maturity</th><th class="num">XIRR</th>
+          <th>Status</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="dealsTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="chart-grid">
+    <div class="card"><h3>Monthly Cash Inflows — Next 24 Months</h3><div class="chart-wrap"><canvas id="chartInflows"></canvas></div></div>
+    <div class="card"><h3>Cumulative Capital Deployed</h3><div class="chart-wrap"><canvas id="chartDeployed"></canvas></div></div>
+    <div class="card"><h3>Composition by Sector</h3><div class="chart-wrap"><canvas id="chartSector"></canvas></div></div>
+    <div class="card"><h3>Composition by Deal Type</h3><div class="chart-wrap"><canvas id="chartDealType"></canvas></div></div>
+    <div class="card" style="grid-column:1/-1"><h3>Deal-wise XIRR</h3><div class="chart-wrap"><canvas id="chartDealXIRR"></canvas></div></div>
+  </div>
+</section>
+
+<!-- ============ MODELER ============ -->
+<section id="modeler" class="section">
+  <h1 class="page-title">Deal Modeler & XIRR Calculator</h1>
+  <div class="page-sub">Model returns before committing capital</div>
+
+  <div class="modetabs">
+    <button class="active" data-mode="amort" onclick="setMode('amort')">Equal Amortization</button>
+    <button data-mode="tranche" onclick="setMode('tranche')">Tranched Investment</button>
+    <button data-mode="custom" onclick="setMode('custom')">Custom Cash Flows</button>
+  </div>
+
+  <div class="row-2">
+    <div class="card">
+      <h3>Inputs</h3>
+      <div id="modeForm"></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn btn-primary" onclick="runModel()">Calculate XIRR</button>
+        <button class="btn btn-ghost" onclick="saveModelAsDeal()">Save as Deal</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Result</h3>
+      <div id="xirrDisplay" class="xirr-big" style="color:var(--text-dim)">—</div>
+      <div id="scenarioPanel"></div>
+    </div>
+  </div>
+
+  <div class="row-2" style="margin-top:14px">
+    <div class="card"><h3>Monthly Cash Flows</h3><div class="chart-wrap"><canvas id="chartModelMonthly"></canvas></div></div>
+    <div class="card"><h3>Cumulative Returns</h3><div class="chart-wrap"><canvas id="chartModelCum"></canvas></div></div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h3>Cash Flow Schedule</h3>
+    <div class="table-wrap" style="max-height:400px;overflow-y:auto">
+      <table id="modelCFTable">
+        <thead><tr><th>Date</th><th class="num">Principal</th><th class="num">Interest</th><th class="num">Net Cash Flow</th><th class="num">Cumulative</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ANALYTICS ============ -->
+<section id="analytics" class="section">
+  <h1 class="page-title">Fund Analytics</h1>
+  <div class="page-sub">Aggregate fund performance & risk</div>
+
+  <div class="row-2" style="margin-bottom:16px">
+    <div class="card">
+      <h3>Fund-Level XIRR</h3>
+      <div id="fundXirr" class="xirr-big">—</div>
+      <div style="text-align:center;color:var(--text-dim);font-size:13px">Across all active & realised deals</div>
+    </div>
+    <div class="card">
+      <h3>Pro-Forma Simulation</h3>
+      <div class="form-grid">
+        <div class="form-row"><label>Hypothetical Investment (₹Cr)</label><input type="number" id="simAmt" value="50"></div>
+        <div class="form-row"><label>Coupon (%)</label><input type="number" id="simRate" value="14" step="0.1"></div>
+        <div class="form-row"><label>Tenor (months)</label><input type="number" id="simTenor" value="36"></div>
+        <div class="form-row"><label>Type</label>
+          <select id="simType"><option>Bullet</option><option>Amortizing</option></select>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:12px;width:100%" onclick="runSim()">Calculate Pro-Forma XIRR</button>
+      <div id="simResult" style="margin-top:14px;text-align:center"></div>
+    </div>
+  </div>
+
+  <div class="row-2">
+    <div class="card"><h3>Vintage Analysis</h3><div id="vintageTable"></div></div>
+    <div class="card"><h3>Maturity Ladder — Next 8 Quarters</h3><div class="chart-wrap"><canvas id="chartMaturity"></canvas></div></div>
+  </div>
+
+  <div class="row-2" style="margin-top:14px">
+    <div class="card"><h3>Top 5 Borrower Concentration</h3><div id="concBorrower"></div></div>
+    <div class="card"><h3>Sector Concentration</h3><div class="chart-wrap"><canvas id="chartSectorConc"></canvas></div></div>
+  </div>
+
+  <div class="row-2" style="margin-top:14px">
+    <div class="card">
+      <h3>Risk Profile</h3>
+      <div id="riskProfile" style="font-size:13px;line-height:2"></div>
+    </div>
+    <div class="card"><h3>Return Attribution</h3><div class="chart-wrap"><canvas id="chartAttribution"></canvas></div></div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ MODALS ============ -->
+<div id="leadModal" class="modal-bg"><div class="modal">
+  <h2><span>Add Lead</span><span class="x" onclick="closeModal('leadModal')">×</span></h2>
+  <form id="leadForm" onsubmit="saveLead(event)">
+    <div class="form-grid">
+      <div class="form-row"><label>Company Name *</label><input name="company" required></div>
+      <div class="form-row"><label>Sector *</label><select name="sector" required>
+        <option>Real Estate</option><option>Infrastructure</option><option>Corporate</option>
+        <option>SME</option><option>Specialty Finance</option><option>Other</option></select></div>
+      <div class="form-row"><label>Deal Type *</label><select name="dealType" required>
+        <option>Senior Secured</option><option>Mezzanine</option><option>Unitranche</option>
+        <option>Second Lien</option><option>Subordinated</option></select></div>
+      <div class="form-row"><label>Deal Size (₹ Cr) *</label><input type="number" step="0.01" name="size" required></div>
+      <div class="form-row"><label>Expected Coupon (% p.a.) *</label><input type="number" step="0.01" name="coupon" required></div>
+      <div class="form-row"><label>Expected Tenor (months) *</label><input type="number" name="tenor" required></div>
+      <div class="form-row"><label>Source</label><select name="source">
+        <option>Direct</option><option>Intermediary</option><option>Referral</option><option>Platform</option></select></div>
+      <div class="form-row"><label>Stage *</label><select name="stage" required>
+        <option>Prospect</option><option>Under Review</option><option>Term Sheet</option>
+        <option>Due Diligence</option><option>Credit Approved</option><option>Closed</option><option>Rejected</option></select></div>
+      <div class="form-row"><label>Expected Close Date</label><input type="date" name="closeDate"></div>
+      <div class="form-row"><label>Assigned To</label><input name="assignedTo"></div>
+      <div class="form-row"><label>Priority</label><select name="priority">
+        <option>High</option><option selected>Medium</option><option>Low</option></select></div>
+      <div class="form-row full"><label>Notes</label><textarea name="notes"></textarea></div>
+    </div>
+    <input type="hidden" name="id">
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal('leadModal')">Cancel</button>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </div>
+  </form>
+</div></div>
+
+<div id="dealModal" class="modal-bg"><div class="modal" style="max-width:880px">
+  <h2><span>Add Deal</span><span class="x" onclick="closeModal('dealModal')">×</span></h2>
+  <form id="dealForm" onsubmit="saveDeal(event)">
+    <div class="form-grid">
+      <div class="form-row"><label>Deal / Company Name *</label><input name="company" required></div>
+      <div class="form-row"><label>Sector *</label><select name="sector" required>
+        <option>Real Estate</option><option>Infrastructure</option><option>Corporate</option>
+        <option>SME</option><option>Specialty Finance</option><option>Other</option></select></div>
+      <div class="form-row"><label>Deal Type *</label><select name="dealType" required>
+        <option>Senior Secured</option><option>Mezzanine</option><option>Unitranche</option>
+        <option>Second Lien</option><option>Subordinated</option></select></div>
+      <div class="form-row"><label>Deal Size (₹ Cr) *</label><input type="number" step="0.01" name="size" required></div>
+      <div class="form-row"><label>Coupon Rate (% p.a.) *</label><input type="number" step="0.01" name="coupon" required></div>
+      <div class="form-row"><label>Tenor (months) *</label><input type="number" name="tenor" required></div>
+      <div class="form-row"><label>Disbursement Date *</label><input type="date" name="startDate" required></div>
+      <div class="form-row"><label>Repayment Type</label><select name="repayType">
+        <option>Bullet</option><option>Amortizing</option><option>Partially Amortizing</option></select></div>
+      <div class="form-row"><label>Amortization Frequency</label><select name="amortFreq">
+        <option>Monthly</option><option>Quarterly</option><option>Semi-Annual</option><option>Annual</option></select></div>
+      <div class="form-row"><label>Moratorium (months)</label><input type="number" name="moratorium" value="0"></div>
+      <div class="form-row"><label>Upfront Fee (%)</label><input type="number" step="0.01" name="upfrontFee" value="0"></div>
+      <div class="form-row"><label>Status</label><select name="status">
+        <option>Active</option><option>Fully Repaid</option><option>Defaulted</option><option>Restructured</option></select></div>
+      <div class="form-row"><label>Borrower Rating</label><select name="rating">
+        <option>AAA</option><option>AA</option><option>A</option><option>BBB</option><option>BB</option>
+        <option>B</option><option>CCC</option><option>CC</option><option>C</option><option>D</option><option selected>Unrated</option></select></div>
+      <div class="form-row"><label>Security Type</label><input name="security"></div>
+      <div class="form-row full"><label>Disbursement Tranches (optional, leave blank for single disbursement on Start Date)</label>
+        <div id="tranchesWrap"></div>
+        <span class="small-add" onclick="addTrancheRow()">+ Add tranche</span>
+      </div>
+      <div class="form-row full"><label>Covenants</label><textarea name="covenants"></textarea></div>
+    </div>
+    <input type="hidden" name="id">
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal('dealModal')">Cancel</button>
+      <button type="submit" class="btn btn-primary">Save Deal</button>
+    </div>
+  </form>
+</div></div>
+
+<div id="cfModal" class="modal-bg"><div class="modal" style="max-width:1000px">
+  <h2><span id="cfModalTitle">Cash Flows</span><span class="x" onclick="closeModal('cfModal')">×</span></h2>
+  <div style="display:flex;gap:10px;margin-bottom:12px">
+    <div class="seg">
+      <button id="cfTabProj" class="active" onclick="setCFTab('proj')">Projected</button>
+      <button id="cfTabAct" onclick="setCFTab('act')">Actual</button>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="exportCFCSV()">⇩ Export CSV</button>
+  </div>
+  <div class="table-wrap" style="max-height:60vh;overflow-y:auto">
+    <table id="cfTable">
+      <thead><tr><th>Date</th><th>Period</th><th class="num">Opening</th><th class="num">Principal</th><th class="num">Interest</th><th class="num">Total</th><th class="num">Closing</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div></div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+/* =========================================================
+   STATE & PERSISTENCE
+   ========================================================= */
+const KEYS = { leads:'pcf_leads', deals:'pcf_deals', cashflows:'pcf_cashflows' };
+let state = {
+  leads: JSON.parse(localStorage.getItem(KEYS.leads) || '[]'),
+  deals: JSON.parse(localStorage.getItem(KEYS.deals) || '[]'),
+  cashflows: JSON.parse(localStorage.getItem(KEYS.cashflows) || '{}'),
+};
+function save(){
+  localStorage.setItem(KEYS.leads, JSON.stringify(state.leads));
+  localStorage.setItem(KEYS.deals, JSON.stringify(state.deals));
+  localStorage.setItem(KEYS.cashflows, JSON.stringify(state.cashflows));
+}
+const uid = () => Math.random().toString(36).slice(2,10);
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+const fmt = n => isFinite(n)?new Intl.NumberFormat('en-IN',{maximumFractionDigits:2}).format(n):'—';
+const pct = n => isFinite(n)?(n*100).toFixed(2)+'%':'—';
+const pct2 = n => isFinite(n)?n.toFixed(2)+'%':'—';
+
+/* =========================================================
+   XIRR (Newton-Raphson, actual/365)
+   ========================================================= */
+function xnpv(rate, flows){
+  if(!flows.length) return 0;
+  const t0 = flows[0].date;
+  let s = 0;
+  for(const f of flows){
+    const d = (f.date - t0)/(1000*60*60*24*365);
+    s += f.amount / Math.pow(1+rate, d);
+  }
+  return s;
+}
+function xnpvDeriv(rate, flows){
+  const t0 = flows[0].date;
+  let s = 0;
+  for(const f of flows){
+    const d = (f.date - t0)/(1000*60*60*24*365);
+    if(d===0) continue;
+    s += -d * f.amount / Math.pow(1+rate, d+1);
+  }
+  return s;
+}
+function xirr(flows, guess=0.1){
+  if(!flows || flows.length<2) return NaN;
+  const norm = flows.map(f => ({date: f.date instanceof Date ? f.date : new Date(f.date), amount: +f.amount}))
+                    .filter(f => !isNaN(f.date) && isFinite(f.amount))
+                    .sort((a,b)=>a.date-b.date);
+  if(norm.length<2) return NaN;
+  const hasPos = norm.some(f=>f.amount>0), hasNeg = norm.some(f=>f.amount<0);
+  if(!hasPos || !hasNeg) return NaN;
+  let r = guess;
+  for(let i=0;i<1000;i++){
+    const v = xnpv(r, norm);
+    if(Math.abs(v) < 1e-7) return r;
+    const d = xnpvDeriv(r, norm);
+    if(d === 0) break;
+    const r2 = r - v/d;
+    if(!isFinite(r2)) break;
+    if(Math.abs(r2-r) < 1e-9) return r2;
+    r = r2;
+    if(r < -0.999) r = -0.999;
+  }
+  // bisection fallback
+  let lo=-0.99, hi=10;
+  let flo = xnpv(lo,norm), fhi = xnpv(hi,norm);
+  if(flo*fhi > 0) return NaN;
+  for(let i=0;i<200;i++){
+    const mid=(lo+hi)/2, fmid=xnpv(mid,norm);
+    if(Math.abs(fmid)<1e-7) return mid;
+    if(flo*fmid<0){hi=mid;fhi=fmid} else {lo=mid;flo=fmid}
+  }
+  return (lo+hi)/2;
+}
+
+/* =========================================================
+   CASH FLOW GENERATOR
+   ========================================================= */
+function freqMonths(f){return {Monthly:1,Quarterly:3,'Semi-Annual':6,Annual:12}[f]||3}
+function addMonths(d,m){const x=new Date(d);x.setMonth(x.getMonth()+m);return x}
+function isoDate(d){return new Date(d).toISOString().slice(0,10)}
+
+/**
+ * Generates schedule from deal parameters.
+ * size in ₹Cr; coupon % p.a.; returns array of {date, period, opening, principal, interest, total, closing}
+ */
+function generateSchedule(deal){
+  const principal = +deal.size;
+  const annualRate = +deal.coupon/100;
+  const tenor = +deal.tenor;
+  const start = new Date(deal.startDate);
+  const morat = +(deal.moratorium||0);
+  const freq = freqMonths(deal.amortFreq||'Quarterly');
+  const repay = deal.repayType||'Bullet';
+  const upfrontFee = +(deal.upfrontFee||0)/100;
+  const periodicRate = annualRate * freq/12;
+
+  const sched = [];
+  let bal = principal;
+  // Day 0 fee record (kept separate, returned via .fee)
+  const fee = principal * upfrontFee;
+
+  // payment periods
+  const totalPeriods = Math.ceil(tenor/freq);
+  const moratPeriods = Math.ceil(morat/freq);
+  const amortPeriods = totalPeriods - moratPeriods;
+
+  for(let p=1;p<=totalPeriods;p++){
+    const date = addMonths(start, p*freq);
+    const opening = bal;
+    let interest = bal * periodicRate;
+    let principalPay = 0;
+    if(p > moratPeriods){
+      if(repay==='Bullet'){
+        if(p===totalPeriods) principalPay = bal;
+      } else if(repay==='Amortizing'){
+        // equal principal
+        principalPay = principal / amortPeriods;
+        if(p===totalPeriods) principalPay = bal;
+      } else { // Partially Amortizing — 50% amortized over tenor, 50% bullet
+        const amortPart = (principal*0.5) / amortPeriods;
+        principalPay = amortPart;
+        if(p===totalPeriods) principalPay = bal;
+      }
+    }
+    bal = Math.max(0, bal - principalPay);
+    sched.push({
+      date: isoDate(date), period:p,
+      opening:+opening.toFixed(4), principal:+principalPay.toFixed(4),
+      interest:+interest.toFixed(4),
+      total:+(principalPay+interest).toFixed(4),
+      closing:+bal.toFixed(4)
+    });
+  }
+  return {schedule:sched, fee, disbursement:principal, startDate:isoDate(start)};
+}
+
+function dealCashflowsForXIRR(deal){
+  const g = generateSchedule(deal);
+  const flows = [];
+  // disbursement (negative outflow), net of upfront fee received same day
+  flows.push({date: new Date(g.startDate), amount: -(g.disbursement - g.fee)});
+  // tranches override?
+  if(deal.tranches && deal.tranches.length){
+    flows.length = 0;
+    let totalDisb = 0;
+    for(const t of deal.tranches){
+      flows.push({date:new Date(t.date), amount: -(+t.amount)*(1-(+(deal.upfrontFee||0)/100))});
+      totalDisb += +t.amount;
+    }
+  }
+  for(const r of g.schedule){
+    flows.push({date:new Date(r.date), amount: r.total});
+  }
+  return flows;
+}
+
+/* =========================================================
+   TAB NAVIGATION
+   ========================================================= */
+document.querySelectorAll('nav.tabs button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    document.querySelectorAll('nav.tabs button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+    document.getElementById(b.dataset.tab).classList.add('active');
+    if(b.dataset.tab==='portfolio') renderPortfolio();
+    if(b.dataset.tab==='analytics') renderAnalytics();
+  });
+});
+
+/* =========================================================
+   LEADS
+   ========================================================= */
+let leadView = 'table';
+function setLeadView(v){
+  leadView = v;
+  document.getElementById('viewTable').classList.toggle('active', v==='table');
+  document.getElementById('viewKanban').classList.toggle('active', v==='kanban');
+  document.getElementById('leadsTableView').style.display = v==='table'?'':'none';
+  document.getElementById('leadsKanbanView').style.display = v==='kanban'?'':'none';
+  renderLeads();
+}
+function stageClass(s){
+  return 'badge stage-' + (s||'').split(' ')[0];
+}
+function filterLeads(){
+  const q = document.getElementById('leadSearch').value.toLowerCase();
+  const fs = document.getElementById('leadFilterStage').value;
+  const fsec = document.getElementById('leadFilterSector').value;
+  const fp = document.getElementById('leadFilterPriority').value;
+  const fdt = document.getElementById('leadFilterDealType').value;
+  return state.leads.filter(l=>{
+    if(q && !((l.company||'').toLowerCase().includes(q) || (l.notes||'').toLowerCase().includes(q))) return false;
+    if(fs && l.stage!==fs) return false;
+    if(fsec && l.sector!==fsec) return false;
+    if(fp && l.priority!==fp) return false;
+    if(fdt && l.dealType!==fdt) return false;
+    return true;
+  });
+}
+function renderLeads(){
+  const ls = filterLeads();
+  if(leadView==='table'){
+    const tb = document.getElementById('leadsTbody');
+    if(!ls.length){tb.innerHTML='<tr><td colspan="9" class="empty">No leads. Click "+ Add Lead" to get started.</td></tr>'}
+    else tb.innerHTML = ls.map(l=>`
+      <tr>
+        <td><b>${esc(l.company)}</b></td><td>${esc(l.sector)}</td><td>${esc(l.dealType)}</td>
+        <td class="num">${fmt(l.size)}</td><td class="num">${pct2(+l.coupon)}</td>
+        <td><span class="${stageClass(l.stage)}">${esc(l.stage)}</span></td>
+        <td>${esc(l.closeDate||'—')}</td>
+        <td class="pri-${l.priority}">${esc(l.priority||'')}</td>
+        <td class="actions">
+          <button class="btn btn-ghost btn-sm" onclick="editLead('${l.id}')">Edit</button>
+          ${l.stage==='Closed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${l.id}')">→ Deal</button>`:''}
+          <button class="btn btn-danger btn-sm" onclick="delLead('${l.id}')">×</button>
+        </td>
+      </tr>`).join('');
+  } else {
+    const stages = ['Prospect','Under Review','Term Sheet','Due Diligence','Credit Approved','Closed','Rejected'];
+    document.getElementById('kanban').innerHTML = stages.map(s=>{
+      const items = ls.filter(l=>l.stage===s);
+      return `<div class="kcol"><h4>${s} <span>${items.length}</span></h4>
+        ${items.map(l=>`<div class="kcard" onclick="editLead('${l.id}')">
+          <div class="name">${esc(l.company)}</div>
+          <div class="meta"><span>₹${fmt(l.size)} Cr</span><span>${pct2(+l.coupon)}</span></div>
+        </div>`).join('')}
+      </div>`;
+    }).join('');
+  }
+  // summary
+  const stages = ['Prospect','Under Review','Term Sheet','Due Diligence','Credit Approved','Closed','Rejected'];
+  const total = ls.reduce((a,b)=>a+(+b.size||0),0);
+  document.getElementById('pipelineSummary').innerHTML =
+    stages.map(s=>`<div><span class="${stageClass(s)}">${s}</span> <b>${ls.filter(l=>l.stage===s).length}</b></div>`).join('') +
+    `<div style="margin-left:auto"><span style="color:var(--text-dim)">Total Pipeline:</span> <b>₹${fmt(total)} Cr</b></div>`;
+}
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+function openLeadModal(){
+  document.getElementById('leadForm').reset();
+  document.getElementById('leadForm').id.value = '';
+  document.querySelector('#leadModal h2 span').textContent = 'Add Lead';
+  document.getElementById('leadModal').classList.add('open');
+}
+function editLead(id){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  const f = document.getElementById('leadForm');
+  for(const k of Object.keys(l)){ if(f.elements[k]) f.elements[k].value = l[k]??'' }
+  document.querySelector('#leadModal h2 span').textContent = 'Edit Lead';
+  document.getElementById('leadModal').classList.add('open');
+}
+function saveLead(e){
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const obj = Object.fromEntries(fd.entries());
+  if(!obj.id){ obj.id = uid(); state.leads.push(obj); } else {
+    const i = state.leads.findIndex(x=>x.id===obj.id); if(i>=0) state.leads[i] = {...state.leads[i], ...obj};
+  }
+  save(); closeModal('leadModal'); renderLeads(); toast('Lead saved');
+}
+function delLead(id){
+  if(!confirm('Delete this lead?')) return;
+  state.leads = state.leads.filter(x=>x.id!==id); save(); renderLeads();
+}
+function convertLead(id){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  openDealModal();
+  const f = document.getElementById('dealForm');
+  f.elements.company.value = l.company||'';
+  f.elements.sector.value = l.sector||'Corporate';
+  f.elements.dealType.value = l.dealType||'Senior Secured';
+  f.elements.size.value = l.size||'';
+  f.elements.coupon.value = l.coupon||'';
+  f.elements.tenor.value = l.tenor||'';
+  f.elements.startDate.value = new Date().toISOString().slice(0,10);
+  f.dataset.fromLead = id;
+}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>{if(e.target===m) m.classList.remove('open')}));
+
+/* =========================================================
+   DEALS
+   ========================================================= */
+function openDealModal(){
+  document.getElementById('dealForm').reset();
+  document.getElementById('dealForm').id.value = '';
+  document.getElementById('tranchesWrap').innerHTML = '';
+  delete document.getElementById('dealForm').dataset.fromLead;
+  document.querySelector('#dealModal h2 span').textContent = 'Add Deal';
+  document.getElementById('dealModal').classList.add('open');
+}
+function addTrancheRow(date='',amt=''){
+  const w = document.getElementById('tranchesWrap');
+  const row = document.createElement('div');
+  row.className = 'tranche-row';
+  row.innerHTML = `<input type="date" value="${date}"><input type="number" step="0.01" placeholder="Amount ₹Cr" value="${amt}">
+    <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">×</button>`;
+  w.appendChild(row);
+}
+function collectTranches(){
+  return [...document.querySelectorAll('#tranchesWrap .tranche-row')].map(r=>{
+    const ins = r.querySelectorAll('input');
+    return {date: ins[0].value, amount: ins[1].value};
+  }).filter(t=>t.date && t.amount);
+}
+function saveDeal(e){
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const obj = Object.fromEntries(fd.entries());
+  obj.tranches = collectTranches();
+  if(!obj.id){ obj.id = uid(); state.deals.push(obj); } else {
+    const i = state.deals.findIndex(x=>x.id===obj.id); if(i>=0) state.deals[i] = {...state.deals[i], ...obj};
+  }
+  // generate cashflows
+  const g = generateSchedule(obj);
+  state.cashflows[obj.id] = g.schedule;
+  // mark lead converted
+  const fromLead = e.target.dataset.fromLead;
+  if(fromLead){ state.leads = state.leads.filter(l=>l.id!==fromLead); }
+  save(); closeModal('dealModal'); renderPortfolio(); renderLeads(); toast('Deal saved');
+}
+function editDeal(id){
+  const d = state.deals.find(x=>x.id===id); if(!d) return;
+  openDealModal();
+  const f = document.getElementById('dealForm');
+  for(const k of Object.keys(d)){ if(f.elements[k]) f.elements[k].value = d[k]??'' }
+  if(d.tranches) d.tranches.forEach(t=>addTrancheRow(t.date,t.amount));
+  document.querySelector('#dealModal h2 span').textContent = 'Edit Deal';
+}
+function delDeal(id){
+  if(!confirm('Delete this deal and its cash flows?')) return;
+  state.deals = state.deals.filter(x=>x.id!==id);
+  delete state.cashflows[id]; save(); renderPortfolio();
+}
+
+let cfDealId = null, cfTab = 'proj';
+function viewCF(id){
+  cfDealId = id;
+  const d = state.deals.find(x=>x.id===id); if(!d) return;
+  document.getElementById('cfModalTitle').textContent = `Cash Flows — ${d.company}`;
+  setCFTab('proj');
+  document.getElementById('cfModal').classList.add('open');
+}
+function setCFTab(t){
+  cfTab = t;
+  document.getElementById('cfTabProj').classList.toggle('active', t==='proj');
+  document.getElementById('cfTabAct').classList.toggle('active', t==='act');
+  renderCF();
+}
+function renderCF(){
+  const sched = state.cashflows[cfDealId] || [];
+  const today = new Date().toISOString().slice(0,10);
+  const tb = document.querySelector('#cfTable tbody');
+  tb.innerHTML = sched.map((r,i)=>{
+    const overdue = r.date < today && r.closing>0 && cfTab==='proj';
+    return `<tr class="${overdue?'cf-overdue':''}">
+      <td>${r.date}</td><td>${r.period}</td>
+      <td class="num">${fmt(r.opening)}</td>
+      <td class="num"><input type="number" step="0.0001" value="${r.principal}" style="width:100px;background:transparent;border:1px solid var(--border);color:inherit;padding:3px;text-align:right" onchange="updateCF(${i},'principal',this.value)"></td>
+      <td class="num"><input type="number" step="0.0001" value="${r.interest}" style="width:100px;background:transparent;border:1px solid var(--border);color:inherit;padding:3px;text-align:right" onchange="updateCF(${i},'interest',this.value)"></td>
+      <td class="num">${fmt(r.principal+r.interest)}</td>
+      <td class="num">${fmt(r.closing)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" class="empty">No cash flows.</td></tr>';
+}
+function updateCF(i,field,val){
+  state.cashflows[cfDealId][i][field] = +val;
+  state.cashflows[cfDealId][i].total = +(+state.cashflows[cfDealId][i].principal + +state.cashflows[cfDealId][i].interest).toFixed(4);
+  save(); renderPortfolio();
+}
+function exportCFCSV(){
+  const sched = state.cashflows[cfDealId] || [];
+  const d = state.deals.find(x=>x.id===cfDealId);
+  const rows = [['Date','Period','Opening','Principal','Interest','Total','Closing'],
+    ...sched.map(r=>[r.date,r.period,r.opening,r.principal,r.interest,r.principal+r.interest,r.closing])];
+  downloadCSV(rows, `cashflows_${(d?.company||'deal').replace(/\s+/g,'_')}.csv`);
+}
+
+function renderPortfolio(){
+  // KPIs
+  const deals = state.deals;
+  const totalDeployed = deals.reduce((a,d)=>a+(+d.size||0),0);
+  const active = deals.filter(d=>d.status==='Active').length;
+  const wac = deals.length ? deals.reduce((a,d)=>a+(+d.coupon||0)*(+d.size||0),0)/totalDeployed : 0;
+  const today = new Date().toISOString().slice(0,10);
+  let intRcvd = 0, prinRcvd = 0, outstanding = 0;
+  deals.forEach(d=>{
+    const cf = state.cashflows[d.id]||[];
+    cf.forEach(r=>{
+      if(r.date <= today){ intRcvd += r.interest; prinRcvd += r.principal; }
+    });
+    outstanding += (+d.size) - cf.filter(r=>r.date<=today).reduce((a,r)=>a+r.principal,0);
+  });
+  // fund xirr
+  const fundFlows = [];
+  deals.forEach(d=>{
+    fundFlows.push(...dealCashflowsForXIRR(d));
+  });
+  const fundXIRR = xirr(fundFlows);
+  const cocMultiple = totalDeployed>0 ? (intRcvd+prinRcvd+outstanding)/totalDeployed : 0;
+
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="kpi"><div class="label">Deployed Capital</div><div class="value">₹${fmt(totalDeployed)} Cr</div></div>
+    <div class="kpi tan"><div class="label">Active Deals</div><div class="value">${active}</div><div class="sub">of ${deals.length} total</div></div>
+    <div class="kpi teal"><div class="label">Wtd Avg Coupon</div><div class="value">${pct2(wac)}</div></div>
+    <div class="kpi green"><div class="label">Fund XIRR</div><div class="value">${pct(fundXIRR)}</div></div>
+    <div class="kpi"><div class="label">Interest Received</div><div class="value">₹${fmt(intRcvd)} Cr</div></div>
+    <div class="kpi tan"><div class="label">Principal Repaid</div><div class="value">₹${fmt(prinRcvd)} Cr</div></div>
+    <div class="kpi teal"><div class="label">Unrealised Book</div><div class="value">₹${fmt(outstanding)} Cr</div></div>
+    <div class="kpi green"><div class="label">Cash-on-Cash</div><div class="value">${cocMultiple.toFixed(2)}x</div></div>
+  `;
+
+  // table
+  const tb = document.getElementById('dealsTbody');
+  if(!deals.length){tb.innerHTML='<tr><td colspan="11" class="empty">No deals. Click "+ Add Deal".</td></tr>'}
+  else tb.innerHTML = deals.map(d=>{
+    const cf = state.cashflows[d.id]||[];
+    const repaid = cf.filter(r=>r.date<=today).reduce((a,r)=>a+r.principal,0);
+    const outs = (+d.size)-repaid;
+    const matDate = cf.length ? cf[cf.length-1].date : '—';
+    const dxirr = xirr(dealCashflowsForXIRR(d));
+    return `<tr>
+      <td><b>${esc(d.company)}</b></td><td>${esc(d.sector)}</td>
+      <td class="num">${fmt(d.size)}</td><td class="num">${fmt(outs)}</td>
+      <td class="num">${pct2(+d.coupon)}</td><td class="num">${d.tenor}m</td>
+      <td>${esc(d.startDate)}</td><td>${matDate}</td>
+      <td class="num">${pct(dxirr)}</td>
+      <td><span class="badge stage-${d.status==='Active'?'Closed':d.status==='Defaulted'?'Rejected':'Term'}">${esc(d.status)}</span></td>
+      <td class="actions">
+        <button class="btn btn-ghost btn-sm" onclick="viewCF('${d.id}')">CF</button>
+        <button class="btn btn-ghost btn-sm" onclick="editDeal('${d.id}')">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="delDeal('${d.id}')">×</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  drawPortfolioCharts();
+}
+
+/* =========================================================
+   CHARTS
+   ========================================================= */
+const chartInstances = {};
+function chart(id, cfg){
+  if(chartInstances[id]) chartInstances[id].destroy();
+  chartInstances[id] = new Chart(document.getElementById(id), cfg);
+}
+const palette = ['#FF7553','#284F70','#DAA06D','#C2B280','#7D8590','#15253F','#4ade80','#fbbf24'];
+const chartDefaults = {
+  responsive:true, maintainAspectRatio:false,
+  plugins:{ legend:{labels:{color:'#9FB1C7',font:{size:11}}}},
+  scales:{
+    x:{ticks:{color:'#9FB1C7',font:{size:10}},grid:{color:'rgba(255,255,255,.05)'}},
+    y:{ticks:{color:'#9FB1C7',font:{size:10}},grid:{color:'rgba(255,255,255,.05)'}}
+  }
+};
+
+function drawPortfolioCharts(){
+  // Inflows next 24 months
+  const today = new Date(); today.setDate(1);
+  const months = [];
+  for(let i=0;i<24;i++){const d=new Date(today);d.setMonth(d.getMonth()+i);months.push(d.toISOString().slice(0,7))}
+  const prinByM = months.map(()=>0), intByM = months.map(()=>0);
+  state.deals.forEach(d=>{
+    (state.cashflows[d.id]||[]).forEach(r=>{
+      const m = r.date.slice(0,7); const i = months.indexOf(m);
+      if(i>=0){prinByM[i]+=r.principal;intByM[i]+=r.interest}
+    });
+  });
+  chart('chartInflows',{type:'bar',data:{labels:months,datasets:[
+    {label:'Principal',data:prinByM,backgroundColor:'#284F70'},
+    {label:'Interest',data:intByM,backgroundColor:'#FF7553'}
+  ]},options:{...chartDefaults,scales:{...chartDefaults.scales,x:{...chartDefaults.scales.x,stacked:true},y:{...chartDefaults.scales.y,stacked:true}}}});
+
+  // Cumulative deployed
+  const dByDate = state.deals.map(d=>({date:d.startDate,amt:+d.size})).sort((a,b)=>a.date.localeCompare(b.date));
+  let cum=0; const cumLabels=[],cumData=[];
+  dByDate.forEach(d=>{cum+=d.amt;cumLabels.push(d.date);cumData.push(cum)});
+  chart('chartDeployed',{type:'line',data:{labels:cumLabels,datasets:[{label:'Cumulative ₹Cr',data:cumData,borderColor:'#FF7553',backgroundColor:'rgba(255,117,83,.15)',fill:true,tension:.2}]},options:chartDefaults});
+
+  // Sector donut
+  const bySec = {}; state.deals.forEach(d=>{bySec[d.sector]=(bySec[d.sector]||0)+(+d.size)});
+  chart('chartSector',{type:'doughnut',data:{labels:Object.keys(bySec),datasets:[{data:Object.values(bySec),backgroundColor:palette}]},options:{...chartDefaults,scales:{}}});
+  const byDT = {}; state.deals.forEach(d=>{byDT[d.dealType]=(byDT[d.dealType]||0)+(+d.size)});
+  chart('chartDealType',{type:'doughnut',data:{labels:Object.keys(byDT),datasets:[{data:Object.values(byDT),backgroundColor:palette}]},options:{...chartDefaults,scales:{}}});
+
+  // Deal XIRR
+  const dx = state.deals.map(d=>({n:d.company,x:xirr(dealCashflowsForXIRR(d))})).filter(x=>isFinite(x.x));
+  chart('chartDealXIRR',{type:'bar',data:{labels:dx.map(x=>x.n),datasets:[{label:'XIRR %',data:dx.map(x=>x.x*100),backgroundColor:'#FF7553'}]},options:chartDefaults});
+}
+
+/* =========================================================
+   MODELER
+   ========================================================= */
+let mode = 'amort';
+let modelResult = null;
+function setMode(m){
+  mode = m;
+  document.querySelectorAll('.modetabs button').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+  renderModeForm();
+}
+function renderModeForm(){
+  const f = document.getElementById('modeForm');
+  if(mode==='amort'){
+    f.innerHTML = `<div class="form-grid">
+      <div class="form-row"><label>Investment Amount (₹)</label><input id="m_amt" type="number" value="100000000"></div>
+      <div class="form-row"><label>Tenor (months)</label><input id="m_tenor" type="number" value="36"></div>
+      <div class="form-row"><label>Moratorium (months)</label><input id="m_morat" type="number" value="0"></div>
+      <div class="form-row"><label>Coupon Rate (% p.a.)</label><input id="m_rate" type="number" step="0.01" value="14"></div>
+      <div class="form-row"><label>Coupon Frequency</label><select id="m_freq"><option>Monthly</option><option selected>Quarterly</option><option>Semi-Annual</option><option>Annual</option></select></div>
+      <div class="form-row"><label>Upfront Fee (%)</label><input id="m_fee" type="number" step="0.01" value="1"></div>
+      <div class="form-row"><label>Repayment Type</label><select id="m_repay"><option>Bullet</option><option>Amortizing</option><option>Partially Amortizing</option></select></div>
+      <div class="form-row"><label>Start Date</label><input id="m_start" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+    </div>`;
+  } else if(mode==='tranche'){
+    f.innerHTML = `<div class="form-grid">
+      <div class="form-row full"><label>Disbursement Tranches</label>
+        <div id="m_tranches"></div>
+        <span class="small-add" onclick="addModelTranche()">+ Add tranche</span>
+      </div>
+      <div class="form-row"><label>Tenor (months from first tranche)</label><input id="m_tenor" type="number" value="36"></div>
+      <div class="form-row"><label>Coupon Rate (% p.a.)</label><input id="m_rate" type="number" step="0.01" value="14"></div>
+      <div class="form-row"><label>Coupon Frequency</label><select id="m_freq"><option>Monthly</option><option selected>Quarterly</option><option>Semi-Annual</option><option>Annual</option></select></div>
+      <div class="form-row"><label>Upfront Fee (%)</label><input id="m_fee" type="number" step="0.01" value="1"></div>
+      <div class="form-row"><label>Repayment Type</label><select id="m_repay"><option>Bullet</option><option>Amortizing</option></select></div>
+    </div>`;
+    addModelTranche(new Date().toISOString().slice(0,10), 50000000);
+  } else {
+    f.innerHTML = `<div class="form-row full"><label>Custom Cash Flows (date + amount; negative = outflow)</label>
+      <div id="m_custom"></div>
+      <span class="small-add" onclick="addCustomCF()">+ Add row</span></div>`;
+    addCustomCF(new Date().toISOString().slice(0,10), -100000000);
+  }
+}
+function addModelTranche(date='',amt=''){
+  const w = document.getElementById('m_tranches');
+  const r = document.createElement('div');
+  r.className='tranche-row';
+  r.innerHTML=`<input type="date" value="${date}"><input type="number" placeholder="Amount" value="${amt}"><button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">×</button>`;
+  w.appendChild(r);
+}
+function addCustomCF(date='',amt=''){
+  const w = document.getElementById('m_custom');
+  const r = document.createElement('div');
+  r.className='tranche-row';
+  r.innerHTML=`<input type="date" value="${date}"><input type="number" placeholder="Amount (- outflow)" value="${amt}"><button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">×</button>`;
+  w.appendChild(r);
+}
+
+function buildModelDeal(){
+  // Build a synthetic deal from form for amort/tranche
+  if(mode==='custom'){
+    const flows = [...document.querySelectorAll('#m_custom .tranche-row')].map(r=>{
+      const ins=r.querySelectorAll('input');
+      return {date:new Date(ins[0].value), amount:+ins[1].value};
+    }).filter(f=>!isNaN(f.date) && isFinite(f.amount));
+    return {custom:true, flows};
+  }
+  const get = id => document.getElementById(id)?.value;
+  const deal = {
+    company:'Model', sector:'Corporate', dealType:'Senior Secured',
+    coupon: get('m_rate'), tenor: get('m_tenor'),
+    moratorium: mode==='amort'?get('m_morat'):0,
+    amortFreq: get('m_freq'),
+    upfrontFee: get('m_fee'), repayType: get('m_repay'),
+    startDate: mode==='amort'? get('m_start') : (document.querySelector('#m_tranches input')?.value || new Date().toISOString().slice(0,10)),
+  };
+  if(mode==='amort'){
+    deal.size = (+get('m_amt'))/1e7; // store in Cr
+  } else {
+    const tr = [...document.querySelectorAll('#m_tranches .tranche-row')].map(r=>{
+      const ins=r.querySelectorAll('input');
+      return {date:ins[0].value, amount:(+ins[1].value)/1e7};
+    }).filter(t=>t.date && t.amount);
+    deal.tranches = tr;
+    deal.size = tr.reduce((a,t)=>a+t.amount,0);
+  }
+  return deal;
+}
+
+function runModel(){
+  const m = buildModelDeal();
+  let flows, schedule;
+  if(m.custom){
+    flows = m.flows;
+    schedule = flows.map((f,i)=>({date:f.date.toISOString().slice(0,10), period:i+1, principal:f.amount<0?0:f.amount, interest:0, opening:0, closing:0, total:f.amount}));
+  } else {
+    flows = dealCashflowsForXIRR(m);
+    const g = generateSchedule(m);
+    schedule = g.schedule;
+  }
+  const r = xirr(flows);
+  modelResult = {deal:m, flows, schedule, xirr:r};
+  displayModelResult();
+}
+function displayModelResult(){
+  const r = modelResult.xirr;
+  const cls = !isFinite(r)?'':r<0.10?'xirr-low':r<0.14?'xirr-mid':'xirr-high';
+  document.getElementById('xirrDisplay').className = 'xirr-big '+cls;
+  document.getElementById('xirrDisplay').textContent = pct(r);
+
+  // sensitivity
+  if(!modelResult.deal.custom){
+    const base = +modelResult.deal.coupon;
+    const rows = [-3,-2,-1,0,1,2,3].map(delta=>{
+      const d = {...modelResult.deal, coupon: base+delta};
+      const x = xirr(dealCashflowsForXIRR(d));
+      return `<tr><td>${delta>=0?'+':''}${delta}%</td><td class="num">${pct2(base+delta)}</td><td class="num"><b>${pct(x)}</b></td></tr>`;
+    }).join('');
+    document.getElementById('scenarioPanel').innerHTML = `<h3 style="margin-top:14px">Scenario Analysis (Coupon Sensitivity)</h3>
+      <table style="font-size:12px;width:100%"><thead><tr><th>Δ</th><th class="num">Coupon</th><th class="num">XIRR</th></tr></thead><tbody>${rows}</tbody></table>`;
+  } else document.getElementById('scenarioPanel').innerHTML='';
+
+  // CF table
+  const tb = document.querySelector('#modelCFTable tbody');
+  let cum = 0;
+  if(modelResult.deal.custom){
+    tb.innerHTML = modelResult.flows.map(f=>{cum+=f.amount;return `<tr><td>${f.date.toISOString().slice(0,10)}</td><td class="num">—</td><td class="num">—</td><td class="num ${f.amount>=0?'pos':'neg'}">${fmt(f.amount)}</td><td class="num">${fmt(cum)}</td></tr>`}).join('');
+  } else {
+    // Day 0 outflow
+    const disb = -(+modelResult.deal.size)*(1-(+modelResult.deal.upfrontFee||0)/100);
+    cum = disb;
+    let html = `<tr><td>${modelResult.deal.startDate}</td><td class="num">—</td><td class="num">—</td><td class="num neg">${fmt(disb)} Cr</td><td class="num">${fmt(cum)}</td></tr>`;
+    modelResult.schedule.forEach(r=>{cum+=r.total;html+=`<tr><td>${r.date}</td><td class="num">${fmt(r.principal)}</td><td class="num">${fmt(r.interest)}</td><td class="num pos">${fmt(r.total)}</td><td class="num">${fmt(cum)}</td></tr>`});
+    tb.innerHTML = html;
+  }
+
+  // charts
+  const labels = modelResult.deal.custom ? modelResult.flows.map(f=>f.date.toISOString().slice(0,10)) : modelResult.schedule.map(r=>r.date);
+  const data = modelResult.deal.custom ? modelResult.flows.map(f=>f.amount) : modelResult.schedule.map(r=>r.total);
+  chart('chartModelMonthly',{type:'bar',data:{labels,datasets:[{label:'Cash Flow',data,backgroundColor:'#FF7553'}]},options:chartDefaults});
+  let c2=0; const cumD = data.map(v=>c2+=v);
+  chart('chartModelCum',{type:'line',data:{labels,datasets:[{label:'Cumulative',data:cumD,borderColor:'#4ade80',backgroundColor:'rgba(74,222,128,.15)',fill:true,tension:.2}]},options:chartDefaults});
+}
+
+function saveModelAsDeal(){
+  if(!modelResult){toast('Run model first');return}
+  if(modelResult.deal.custom){toast('Cannot save custom CF as a deal');return}
+  const d = {...modelResult.deal, id:uid(), status:'Active', rating:'Unrated', security:'', covenants:'', company: prompt('Deal name?')||'Model Deal'};
+  state.deals.push(d);
+  state.cashflows[d.id] = generateSchedule(d).schedule;
+  save(); toast('Saved as deal');
+}
+
+/* =========================================================
+   ANALYTICS
+   ========================================================= */
+function renderAnalytics(){
+  const fundFlows = []; state.deals.forEach(d=>fundFlows.push(...dealCashflowsForXIRR(d)));
+  const fx = xirr(fundFlows);
+  const cls = !isFinite(fx)?'':fx<0.10?'xirr-low':fx<0.14?'xirr-mid':'xirr-high';
+  const el = document.getElementById('fundXirr'); el.className='xirr-big '+cls; el.textContent = pct(fx);
+
+  // vintage
+  const v = {};
+  state.deals.forEach(d=>{
+    const y = (d.startDate||'').slice(0,4)||'?';
+    v[y] = v[y]||{count:0, deployed:0, flows:[]};
+    v[y].count++; v[y].deployed += +d.size; v[y].flows.push(...dealCashflowsForXIRR(d));
+  });
+  document.getElementById('vintageTable').innerHTML = `<table style="width:100%"><thead><tr><th>Year</th><th class="num">Deals</th><th class="num">Deployed ₹Cr</th><th class="num">XIRR</th></tr></thead><tbody>
+    ${Object.entries(v).sort().map(([y,o])=>`<tr><td>${y}</td><td class="num">${o.count}</td><td class="num">${fmt(o.deployed)}</td><td class="num">${pct(xirr(o.flows))}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">No deals</td></tr>'}</tbody></table>`;
+
+  // maturity ladder — next 8 quarters
+  const today = new Date();
+  const qLabels=[], qData=[];
+  for(let i=0;i<8;i++){
+    const qStart = new Date(today.getFullYear(), Math.floor(today.getMonth()/3)*3 + i*3, 1);
+    const qEnd = new Date(qStart); qEnd.setMonth(qEnd.getMonth()+3);
+    qLabels.push(`Q${Math.floor(qStart.getMonth()/3)+1} ${qStart.getFullYear()}`);
+    let sum = 0;
+    state.deals.forEach(d=>(state.cashflows[d.id]||[]).forEach(r=>{
+      const rd = new Date(r.date);
+      if(rd>=qStart && rd<qEnd) sum += r.principal;
+    }));
+    qData.push(sum);
+  }
+  chart('chartMaturity',{type:'bar',data:{labels:qLabels,datasets:[{label:'Principal Due ₹Cr',data:qData,backgroundColor:qData.map(v=>v>50?'#FF7553':'#284F70')}]},options:chartDefaults});
+
+  // top borrowers
+  const tot = state.deals.reduce((a,d)=>a+(+d.size),0);
+  const sorted = [...state.deals].sort((a,b)=>(+b.size)-(+a.size)).slice(0,5);
+  document.getElementById('concBorrower').innerHTML = `<table style="width:100%"><thead><tr><th>Borrower</th><th class="num">₹Cr</th><th class="num">% Book</th></tr></thead><tbody>
+    ${sorted.map(d=>`<tr><td>${esc(d.company)}</td><td class="num">${fmt(d.size)}</td><td class="num">${tot?(d.size/tot*100).toFixed(1):'0'}%</td></tr>`).join('')||'<tr><td colspan="3" class="empty">—</td></tr>'}</tbody></table>`;
+
+  // sector concentration
+  const bySec = {}; state.deals.forEach(d=>bySec[d.sector]=(bySec[d.sector]||0)+(+d.size));
+  chart('chartSectorConc',{type:'pie',data:{labels:Object.keys(bySec),datasets:[{data:Object.values(bySec),backgroundColor:palette}]},options:{...chartDefaults,scales:{}}});
+
+  // risk profile
+  const ratingMap = {AAA:1,AA:2,A:3,BBB:4,BB:5,B:6,CCC:7,CC:8,C:9,D:10,Unrated:5};
+  const wRating = tot ? state.deals.reduce((a,d)=>a+(ratingMap[d.rating]||5)*(+d.size),0)/tot : 0;
+  const np = state.deals.filter(d=>d.status==='Defaulted'||d.status==='Restructured');
+  const npAmt = np.reduce((a,d)=>a+(+d.size),0);
+  document.getElementById('riskProfile').innerHTML = `
+    <div><b>Weighted Avg Rating:</b> ~${['','AAA','AA','A','BBB','BB','B','CCC','CC','C','D'][Math.round(wRating)]||'Unrated'}</div>
+    <div><b>NPA / Watchlist Deals:</b> ${np.length}</div>
+    <div><b>NPA Exposure:</b> ₹${fmt(npAmt)} Cr (${tot?(npAmt/tot*100).toFixed(1):'0'}% of book)</div>
+    <div><b>Active Deals:</b> ${state.deals.filter(d=>d.status==='Active').length}</div>
+    <div><b>Fully Repaid:</b> ${state.deals.filter(d=>d.status==='Fully Repaid').length}</div>
+  `;
+
+  // attribution (interest vs fees, then by deal)
+  let totalInt=0, totalFee=0;
+  state.deals.forEach(d=>{
+    totalFee += (+d.size)*(+(d.upfrontFee||0)/100);
+    (state.cashflows[d.id]||[]).forEach(r=>totalInt += r.interest);
+  });
+  chart('chartAttribution',{type:'doughnut',data:{labels:['Coupon Interest','Upfront Fees'],datasets:[{data:[totalInt,totalFee],backgroundColor:['#FF7553','#DAA06D']}]},options:{...chartDefaults,scales:{}}});
+}
+
+function runSim(){
+  const amt = +document.getElementById('simAmt').value;
+  const rate = +document.getElementById('simRate').value;
+  const tenor = +document.getElementById('simTenor').value;
+  const type = document.getElementById('simType').value;
+  const hyp = {company:'Sim',sector:'Corporate',dealType:'Senior Secured',
+    size:amt, coupon:rate, tenor, startDate:new Date().toISOString().slice(0,10),
+    repayType:type, amortFreq:'Quarterly', moratorium:0, upfrontFee:0};
+  const fundFlows = []; state.deals.forEach(d=>fundFlows.push(...dealCashflowsForXIRR(d)));
+  const current = xirr(fundFlows);
+  const proForma = xirr([...fundFlows, ...dealCashflowsForXIRR(hyp)]);
+  document.getElementById('simResult').innerHTML = `
+    <div style="display:flex;justify-content:space-around;font-size:13px">
+      <div><div style="color:var(--text-dim)">Current</div><div style="font-size:24px;font-weight:700">${pct(current)}</div></div>
+      <div style="font-size:24px;color:var(--text-dim);align-self:center">→</div>
+      <div><div style="color:var(--text-dim)">Pro-Forma</div><div style="font-size:24px;font-weight:700;color:${proForma>current?'var(--green-pos)':'var(--red-neg)'}">${pct(proForma)}</div></div>
+      <div><div style="color:var(--text-dim)">Δ</div><div style="font-size:24px;font-weight:700">${isFinite(proForma-current)?((proForma-current)*100).toFixed(2)+'%':'—'}</div></div>
+    </div>`;
+}
+
+/* =========================================================
+   CSV / XLSX
+   ========================================================= */
+function downloadCSV(rows, name){
+  const csv = rows.map(r=>r.map(c=>{const s=String(c??'');return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}).join(',')).join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+}
+function exportLeadsCSV(){
+  const cols=['company','sector','dealType','size','coupon','tenor','source','stage','closeDate','assignedTo','priority','notes'];
+  downloadCSV([cols, ...state.leads.map(l=>cols.map(c=>l[c]||''))],'leads.csv');
+}
+function exportXLSX(){
+  const wb = XLSX.utils.book_new();
+  // leads
+  const leadCols=['id','company','sector','dealType','size','coupon','tenor','source','stage','closeDate','assignedTo','priority','notes'];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.leads.map(l=>{const o={};leadCols.forEach(c=>o[c]=l[c]||'');return o})), 'Leads');
+  // deals
+  const dealCols=['id','company','sector','dealType','size','coupon','tenor','startDate','repayType','amortFreq','moratorium','upfrontFee','status','rating','security','covenants'];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.deals.map(d=>{const o={};dealCols.forEach(c=>o[c]=d[c]||'');return o})), 'Deals');
+  // cash flows long
+  const cf = [];
+  state.deals.forEach(d=>(state.cashflows[d.id]||[]).forEach(r=>cf.push({dealId:d.id,deal:d.company,...r,total:r.principal+r.interest})));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cf), 'CashFlows');
+  XLSX.writeFile(wb, `SpECS_Fund_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Excel exported');
+}
+function importXLSX(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try{
+      const wb = XLSX.read(ev.target.result, {type:'array'});
+      let imported = 0;
+      if(wb.Sheets['Leads']){
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets['Leads']);
+        rows.forEach(r=>{
+          if(!r.company) return;
+          const existing = r.id && state.leads.find(l=>l.id===r.id);
+          if(existing) Object.assign(existing, r);
+          else state.leads.push({...r, id:r.id||uid()});
+          imported++;
+        });
+      }
+      if(wb.Sheets['Deals']){
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets['Deals']);
+        rows.forEach(r=>{
+          if(!r.company) return;
+          // normalize date
+          if(r.startDate instanceof Date) r.startDate = r.startDate.toISOString().slice(0,10);
+          const existing = r.id && state.deals.find(d=>d.id===r.id);
+          if(existing) Object.assign(existing, r);
+          else { r.id = r.id||uid(); state.deals.push(r); }
+          state.cashflows[r.id] = generateSchedule(r).schedule;
+          imported++;
+        });
+      }
+      if(wb.Sheets['CashFlows']){
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets['CashFlows']);
+        const grouped = {};
+        rows.forEach(r=>{
+          if(!r.dealId) return;
+          if(r.date instanceof Date) r.date = r.date.toISOString().slice(0,10);
+          (grouped[r.dealId] = grouped[r.dealId]||[]).push({
+            date:r.date, period:+r.period, opening:+r.opening, principal:+r.principal,
+            interest:+r.interest, total:+(r.total||r.principal+r.interest), closing:+r.closing
+          });
+        });
+        Object.assign(state.cashflows, grouped);
+      }
+      save(); renderLeads(); renderPortfolio();
+      toast(`Imported ${imported} rows`);
+    } catch(err){ alert('Import failed: '+err.message) }
+    e.target.value='';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* =========================================================
+   INIT
+   ========================================================= */
+renderModeForm();
+renderLeads();
+window.addEventListener('beforeunload', save);
+</script>
+</body>
+</html>
