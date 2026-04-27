@@ -613,13 +613,14 @@
 /* =========================================================
    STATE & PERSISTENCE
    ========================================================= */
-const KEYS = { leads:'pcf_leads', deals:'pcf_deals', cashflows:'pcf_cashflows', fund:'pcf_fund', distributions:'pcf_distributions' };
+const KEYS = { leads:'pcf_leads', deals:'pcf_deals', cashflows:'pcf_cashflows', fund:'pcf_fund', distributions:'pcf_distributions', documents:'pcf_documents' };
 let state = {
   leads: JSON.parse(localStorage.getItem(KEYS.leads) || '[]'),
   deals: JSON.parse(localStorage.getItem(KEYS.deals) || '[]'),
   cashflows: JSON.parse(localStorage.getItem(KEYS.cashflows) || '{}'),
   fund: JSON.parse(localStorage.getItem(KEYS.fund) || '{"commitment":0,"drawn":0,"cashAvailable":0,"cashYield":0}'),
   distributions: JSON.parse(localStorage.getItem(KEYS.distributions) || '[]'),
+  documents: JSON.parse(localStorage.getItem(KEYS.documents) || '[]'),
 };
 function save(){
   localStorage.setItem(KEYS.leads, JSON.stringify(state.leads));
@@ -627,6 +628,7 @@ function save(){
   localStorage.setItem(KEYS.cashflows, JSON.stringify(state.cashflows));
   localStorage.setItem(KEYS.fund, JSON.stringify(state.fund));
   localStorage.setItem(KEYS.distributions, JSON.stringify(state.distributions));
+  localStorage.setItem(KEYS.documents, JSON.stringify(state.documents));
 }
 const uid = () => Math.random().toString(36).slice(2,10);
 function toast(msg){
