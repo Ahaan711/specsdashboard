@@ -674,7 +674,10 @@ function dealCashflowsForXIRR(deal){
       totalDisb += +t.amount;
     }
   }
+  const todayStr = new Date().toISOString().slice(0,10);
   for(const r of g.schedule){
+    // Defaulted deals: only count flows already received (date <= today)
+    if(deal.status === 'Defaulted' && r.date > todayStr) continue;
     flows.push({date:new Date(r.date), amount: r.total});
   }
   return flows;
