@@ -308,7 +308,8 @@
       <div class="page-sub">Live view of all deployed capital</div>
     </div>
     <div style="display:flex;gap:8px">
-      
+      <input type="file" id="tsFile" accept=".pdf,.docx,.txt" style="display:none" onchange="handleTermSheet(event)">
+      <button class="btn btn-ghost" onclick="document.getElementById('tsFile').click()">📄 Upload Term Sheet</button>
       <button class="btn btn-primary" onclick="openDealModal()">+ Add Deal</button>
     </div>
   </div>
