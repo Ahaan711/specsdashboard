@@ -1082,7 +1082,7 @@ function renderPortfolio(){
     const matDate = cf.length ? cf[cf.length-1].date : '—';
     const dxirr = (d.xirrOverride!=null && d.xirrOverride!=='' && isFinite(+d.xirrOverride)) ? (+d.xirrOverride/100) : xirr(dealCashflowsForXIRR(d));
     return `<tr>
-      <td><b>${esc(d.company)}</b></td><td>${esc(d.sector)}</td>
+      <td><b><a href="#" onclick="event.preventDefault();openDealDetail('${d.id}')" style="color:var(--text);border-bottom:1px dashed var(--orange)">${esc(d.company)}</a></b></td><td>${esc(d.sector)}</td>
       <td class="num">${fmt(d.size)}</td><td class="num">${fmt(inv)}</td><td class="num">${fmt(outs)}</td>
       <td class="num">${pct2(+d.coupon)}</td><td class="num">${d.tenor}m</td>
       <td>${esc(d.startDate)}</td><td>${matDate}</td>
