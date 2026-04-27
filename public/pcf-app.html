@@ -1770,6 +1770,119 @@ function openDealDetail(id){
 }
 
 /* =========================================================
+   DOCUMENTS LIBRARY
+   ========================================================= */
+function fileToDataURL(file){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+function fmtBytes(n){
+  if(!n && n!==0) return '—';
+  if(n<1024) return n+' B';
+  if(n<1024*1024) return (n/1024).toFixed(1)+' KB';
+  return (n/1024/1024).toFixed(2)+' MB';
+}
+async function saveDocument(file, kind, meta){
+  meta = meta || {};
+  try{
+    const dataUrl = await fileToDataURL(file);
+    const doc = {
+      id: uid(),
+      name: file.name,
+      type: file.type || '',
+      kind: kind || 'other',           // excel-import | term-sheet | other
+      size: file.size || 0,
+      uploadedAt: new Date().toISOString(),
+      dataUrl,
+      note: meta.note || '',
+      linkedCompany: meta.linkedCompany || '',
+      linkedDealId: meta.linkedDealId || '',
+      linkedLeadId: meta.linkedLeadId || '',
+    };
+    state.documents = state.documents || [];
+    state.documents.unshift(doc);
+    try { save(); }
+    catch(e){
+      // localStorage quota — drop oldest until it fits
+      while(state.documents.length>1){
+        state.documents.pop();
+        try { save(); break; } catch(_){}
+      }
+      toast('Storage full — older documents removed');
+    }
+    if(document.getElementById('documents').classList.contains('active')) renderDocuments();
+  } catch(err){
+    console.error(err);
+    toast('Could not save file: '+err.message);
+  }
+}
+function uploadDocument(ev){
+  const file = ev.target.files[0]; ev.target.value='';
+  if(!file) return;
+  const lower = file.name.toLowerCase();
+  let kind = 'other';
+  if(lower.endsWith('.xlsx')||lower.endsWith('.xls')||lower.endsWith('.csv')) kind = 'excel-import';
+  else if(lower.endsWith('.pdf')||lower.endsWith('.docx')) kind = 'term-sheet';
+  saveDocument(file, kind, {}).then(()=> toast('Saved to Documents'));
+}
+function kindLabel(k){
+  return k==='excel-import' ? 'Excel Import'
+       : k==='term-sheet'   ? 'Term Sheet'
+       : 'Other';
+}
+function renderDocuments(){
+  const tb = document.getElementById('docsTbody'); if(!tb) return;
+  const q = (document.getElementById('docSearch').value||'').toLowerCase();
+  const fk = document.getElementById('docFilterKind').value;
+  const docs = (state.documents||[]).filter(d=>{
+    if(fk && d.kind!==fk) return false;
+    if(q && !((d.name||'').toLowerCase().includes(q) || (d.note||'').toLowerCase().includes(q) || (d.linkedCompany||'').toLowerCase().includes(q))) return false;
+    return true;
+  });
+  if(!docs.length){
+    tb.innerHTML = '<tr><td colspan="8" class="empty">No saved documents yet. Imported Excel files and uploaded term sheets appear here automatically.</td></tr>';
+    return;
+  }
+  tb.innerHTML = docs.map((d,i)=>{
+    const dt = new Date(d.uploadedAt);
+    const dateStr = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    return `<tr>
+      <td>${i+1}</td>
+      <td><b>${esc(d.name)}</b></td>
+      <td><span class="badge">${kindLabel(d.kind)}</span></td>
+      <td>${fmtBytes(d.size)}</td>
+      <td>${esc(d.linkedCompany||'—')}</td>
+      <td>${esc(dateStr)}</td>
+      <td>${esc(d.note||'')}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick="downloadDocument('${d.id}')">⇩ Download</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteDocument('${d.id}')">×</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+function downloadDocument(id){
+  const d = (state.documents||[]).find(x=>x.id===id); if(!d) return;
+  const a = document.createElement('a');
+  a.href = d.dataUrl; a.download = d.name;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function deleteDocument(id){
+  if(!confirm('Delete this document?')) return;
+  state.documents = (state.documents||[]).filter(x=>x.id!==id);
+  save(); renderDocuments(); toast('Document deleted');
+}
+function clearAllDocuments(){
+  if(!(state.documents||[]).length) return;
+  if(!confirm('Delete ALL saved documents? This cannot be undone.')) return;
+  state.documents = []; save(); renderDocuments(); toast('All documents cleared');
+}
+
+/* =========================================================
    INIT
    ========================================================= */
 renderModeForm();
