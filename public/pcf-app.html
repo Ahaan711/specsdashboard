@@ -209,6 +209,59 @@
 </head>
 <body>
 
+<!-- ============ LOGIN GATE ============ -->
+<div id="loginGate" style="position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#0b1530 0%,#1a2547 100%);display:flex;align-items:center;justify-content:center;font-family:Inter,system-ui,sans-serif">
+  <form id="loginForm" onsubmit="return doLogin(event)" style="background:rgba(20,30,55,.95);border:1px solid rgba(255,117,83,.4);border-radius:14px;padding:36px 40px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+    <div style="text-align:center;margin-bottom:22px">
+      <div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:.5px">Spark Asia Impact</div>
+      <div style="font-size:11px;color:#9FB1C7;letter-spacing:1.5px;margin-top:4px">SpECS FUND DASHBOARD</div>
+    </div>
+    <label style="display:block;font-size:12px;color:#9FB1C7;margin-bottom:6px;font-weight:600">Password</label>
+    <input id="loginPw" type="password" autofocus autocomplete="current-password"
+      style="width:100%;padding:11px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.3);color:#fff;font-size:14px;outline:none;box-sizing:border-box"
+      placeholder="Enter shared password"/>
+    <div id="loginErr" style="color:#f87171;font-size:12px;margin-top:8px;min-height:16px"></div>
+    <button type="submit" style="width:100%;margin-top:14px;padding:11px;border:none;border-radius:8px;background:linear-gradient(135deg,#FF7553,#ff8e6a);color:#fff;font-weight:700;font-size:14px;cursor:pointer;letter-spacing:.3px">Sign In</button>
+    <div style="text-align:center;font-size:11px;color:#6b7a94;margin-top:14px">Shared team access • All users see the same data</div>
+  </form>
+</div>
+<script>
+  (function(){
+    const SHARED_PW = 'spark$123$';
+    const KEY = 'pcf_auth_v1';
+    function unlock(){
+      const g = document.getElementById('loginGate');
+      if(g) g.style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    if(sessionStorage.getItem(KEY) === '1' || localStorage.getItem(KEY) === '1'){
+      unlock();
+    } else {
+      document.body.style.overflow = 'hidden';
+    }
+    window.doLogin = function(e){
+      e.preventDefault();
+      const pw = document.getElementById('loginPw').value;
+      const err = document.getElementById('loginErr');
+      if(pw === SHARED_PW){
+        sessionStorage.setItem(KEY,'1');
+        localStorage.setItem(KEY,'1');
+        err.textContent = '';
+        unlock();
+      } else {
+        err.textContent = 'Incorrect password';
+        document.getElementById('loginPw').value = '';
+      }
+      return false;
+    };
+    window.logout = function(){
+      sessionStorage.removeItem(KEY);
+      localStorage.removeItem(KEY);
+      location.reload();
+    };
+  })();
+</script>
+
 <header class="topbar">
   <div class="logo">
     <svg viewBox="0 0 360 56" xmlns="http://www.w3.org/2000/svg">
