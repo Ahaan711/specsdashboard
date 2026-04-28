@@ -954,14 +954,41 @@ function saveLead(e){
   e.preventDefault();
   const fd = new FormData(e.target);
   const obj = Object.fromEntries(fd.entries());
-  // Merge "Other" custom values into the actual field
   if(obj.sector==='Other' && (obj.sectorOther||'').trim()) obj.sector = obj.sectorOther.trim();
   if(obj.dealType==='Other' && (obj.dealTypeOther||'').trim()) obj.dealType = obj.dealTypeOther.trim();
   delete obj.sectorOther; delete obj.dealTypeOther;
+  // Prompt for remarks when stage requires context
+  const needsRemark = ['Rejected','Passive','Lost'];
+  const prev = obj.id ? state.leads.find(x=>x.id===obj.id) : null;
+  const stageChanged = !prev || prev.stage !== obj.stage;
+  if(needsRemark.includes(obj.stage) && stageChanged && !(obj.remarks||'').trim()){
+    const r = window.prompt(`This lead is being marked as "${obj.stage}".\nAdd a short remark (why? next steps?) — helpful for investor recall:`, prev?.remarks||'');
+    if(r===null){ return; } // cancelled
+    obj.remarks = r.trim();
+  }
   if(!obj.id){ obj.id = uid(); state.leads.push(obj); } else {
     const i = state.leads.findIndex(x=>x.id===obj.id); if(i>=0) state.leads[i] = {...state.leads[i], ...obj};
   }
   save(); closeModal('leadModal'); renderLeads(); toast('Lead saved');
+}
+function editRemarks(id){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  const r = window.prompt(`Remarks for ${l.company} (status: ${l.stage}):`, l.remarks||'');
+  if(r===null) return;
+  l.remarks = r.trim(); save(); renderLeads(); toast('Remarks updated');
+}
+function quickChangeStage(id){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  const stages = ['Active','Passive','Rejected','Lost','Completed'];
+  const ns = window.prompt(`Change status for ${l.company}.\nOptions: ${stages.join(', ')}\nCurrent: ${l.stage}`, l.stage);
+  if(!ns || !stages.includes(ns)) return;
+  if(ns === l.stage) return;
+  l.stage = ns;
+  if(['Rejected','Passive','Lost'].includes(ns)){
+    const r = window.prompt(`Marked as "${ns}". Add a remark for future recall:`, l.remarks||'');
+    if(r!==null) l.remarks = r.trim();
+  }
+  save(); renderLeads(); toast('Status updated');
 }
 function delLead(id){
   if(!confirm('Delete this lead?')) return;
