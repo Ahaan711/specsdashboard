@@ -981,9 +981,9 @@ function renderLeads(){
         <td><span class="${stageClass(l.stage)}" style="cursor:pointer" onclick="quickChangeStage('${l.id}')" title="Click to change status">${esc(l.stage)}</span></td>
         <td title="${esc(remarksTxt)}" style="max-width:240px;cursor:pointer" onclick="editRemarks('${l.id}')">${remarksShort}</td>
         <td class="actions">
-          <button class="btn btn-ghost btn-sm" onclick="editLead('${l.id}')">Edit</button>
-          ${l.stage==='Completed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${l.id}')">→ Deal</button>`:''}
-          <button class="btn btn-danger btn-sm" onclick="delLead('${l.id}')">×</button>
+          <button class="btn btn-ghost btn-sm" onclick="editLead('${esc(l.id)}')">Edit</button>
+         ${l.stage==='Completed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${esc(l.id)}')">→ Deal</button>`:''}
+         <button class="btn btn-danger btn-sm" onclick="delLead('${esc(l.id)}')">×</button>
         </td>
       </tr>`}).join('');
   } else {
@@ -991,7 +991,7 @@ function renderLeads(){
     document.getElementById('kanban').innerHTML = stages.map(s=>{
       const items = ls.filter(l=>l.stage===s);
       return `<div class="kcol"><h4>${s} <span>${items.length}</span></h4>
-        ${items.map(l=>`<div class="kcard" onclick="editLead('${l.id}')">
+        ${items.map(l=>`<div class="kcard" onclick="editLead('${esc(l.id)}')">
           <div class="name">${esc(l.company)}</div>
           <div class="meta"><span>₹${fmt(l.size)} Cr</span>${l.tenor?`<span>${(+l.tenor).toFixed(2)} yrs</span>`:''}</div>
         </div>`).join('')}
@@ -1339,16 +1339,16 @@ function renderPortfolio(){
     const matDate = cf.length ? cf[cf.length-1].date : '—';
     const dxirr = (d.xirrOverride!=null && d.xirrOverride!=='' && isFinite(+d.xirrOverride)) ? (+d.xirrOverride/100) : xirr(dealCashflowsForXIRR(d));
     return `<tr>
-      <td><b><a href="#" onclick="event.preventDefault();openDealDetail('${d.id}')" style="color:var(--text);border-bottom:1px dashed var(--orange)">${esc(d.company)}</a></b></td><td>${esc(d.sector)}</td>
+      <td><b><a href="#" onclick="event.preventDefault();openDealDetail('${esc(d.id)}')" style="color:var(--text);border-bottom:1px dashed var(--orange)">${esc(d.company)}</a></b></td><td>${esc(d.sector)}</td>
       <td class="num">${fmt(d.size)}</td><td class="num">${fmt(inv)}</td><td class="num">${fmt(outs)}</td>
       <td class="num">${pct2(+d.coupon)}</td><td class="num">${d.tenor}m</td>
       <td>${esc(d.startDate)}</td><td>${matDate}</td>
       <td class="num">${pct(dxirr)}</td>
       <td><span class="badge stage-${d.status==='Active'?'Closed':d.status==='Defaulted'?'Rejected':'Term'}">${esc(d.status)}</span></td>
       <td class="actions">
-        <button class="btn btn-ghost btn-sm" onclick="viewCF('${d.id}')">CF</button>
-        <button class="btn btn-ghost btn-sm" onclick="editDeal('${d.id}')">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="delDeal('${d.id}')">×</button>
+        <button class="btn btn-ghost btn-sm" onclick="viewCF('${esc(d.id)}')">CF</button>
+       <button class="btn btn-ghost btn-sm" onclick="editDeal('${esc(d.id)}')">Edit</button>
+       <button class="btn btn-danger btn-sm" onclick="delDeal('${esc(d.id)}')">×</button>
       </td>
     </tr>`;
   }).join('');
@@ -2024,8 +2024,8 @@ function renderDocuments(){
       <td>${esc(dateStr)}</td>
       <td>${esc(d.note||'')}</td>
       <td style="text-align:right;white-space:nowrap">
-        <button class="btn btn-ghost btn-sm" onclick="downloadDocument('${d.id}')">⇩ Download</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteDocument('${d.id}')">×</button>
+        <button class="btn btn-ghost btn-sm" onclick="downloadDocument('${esc(d.id)}')">⇩ Download</button>
+       <button class="btn btn-danger btn-sm" onclick="deleteDocument('${esc(d.id)}')">×</button>
       </td>
     </tr>`;
   }).join('');
