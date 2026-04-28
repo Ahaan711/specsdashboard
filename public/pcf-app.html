@@ -1998,7 +1998,19 @@ function clearAllDocuments(){
    ========================================================= */
 renderModeForm();
 renderLeads();
-backfillSectors();
+(async () => {
+  const ok = await cloudHydrate();
+  if(ok){
+    renderLeads();
+    if(document.getElementById('portfolio')?.classList.contains('active')) renderPortfolio();
+    if(document.getElementById('documents')?.classList.contains('active')) renderDocuments();
+    cloudSubscribe();
+    toast('☁️ Live sync enabled');
+  } else {
+    toast('⚠️ Cloud sync unavailable — using local data');
+  }
+  backfillSectors();
+})();
 window.addEventListener('beforeunload', save);
 
 /* =========================================================
