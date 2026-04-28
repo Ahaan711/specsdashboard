@@ -36,10 +36,16 @@ export const Route = createFileRoute("/api/classify-sector")({
               headers: cors,
             });
           }
+          if (company.length > 200) {
+            return new Response(JSON.stringify({ error: "company name too long (max 200 chars)" }), {
+              status: 400,
+              headers: cors,
+            });
+          }
 
           const apiKey = process.env.LOVABLE_API_KEY;
           if (!apiKey) {
-            return new Response(JSON.stringify({ error: "LOVABLE_API_KEY missing" }), {
+            return new Response(JSON.stringify({ error: "AI service unavailable" }), {
               status: 500,
               headers: cors,
             });
@@ -88,8 +94,9 @@ export const Route = createFileRoute("/api/classify-sector")({
 
           if (!res.ok) {
             const t = await res.text();
+            console.error(`AI gateway error ${res.status}:`, t);
             return new Response(
-              JSON.stringify({ error: `AI gateway ${res.status}`, details: t }),
+              JSON.stringify({ error: "Upstream AI service error" }),
               { status: res.status === 429 || res.status === 402 ? res.status : 502, headers: cors },
             );
           }
@@ -108,8 +115,9 @@ export const Route = createFileRoute("/api/classify-sector")({
             { headers: cors },
           );
         } catch (e) {
+          console.error("classify-sector error:", e);
           return new Response(
-            JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+            JSON.stringify({ error: "Internal server error" }),
             { status: 500, headers: cors },
           );
         }
