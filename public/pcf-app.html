@@ -579,8 +579,8 @@
       <datalist id="referrerNamesList"></datalist>
       <div class="form-row"><label>Referrer Contact (phone / email)</label><input name="referredContact" id="leadReferredContact" placeholder="+91… or name@firm.com"></div>
       <div class="form-row"><label>Credit Rating</label><input name="creditRating" placeholder="e.g. AA-, BBB+, Unrated"></div>
-      <div class="form-row"><label>Rating Rationale (PDF/Doc)</label>
-        <input type="file" id="leadRatingRationaleFile" accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg" style="font-size:12px">
+      <div class="form-row"><label>Rating Rationale (PDF/Doc) <span style="font-weight:400;color:var(--muted);font-size:11px">— rating auto-extracted on upload</span></label>
+        <input type="file" id="leadRatingRationaleFile" accept=".pdf,.docx,.doc,.txt" style="font-size:12px" onchange="autoExtractRating(this)">
         <div id="leadRatingRationaleHint" style="font-size:11px;color:var(--text-dim);margin-top:4px"></div>
       </div>
       <div class="form-row"><label>Status *</label><select name="stage" required onchange="toggleLostFields(this.value)">
