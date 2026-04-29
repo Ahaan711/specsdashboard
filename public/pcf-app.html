@@ -1241,10 +1241,10 @@ function convertLead(id){
   const f = document.getElementById('dealForm');
   f.elements.company.value = l.company||'';
   f.elements.sector.value = l.sector||'Corporate';
-  f.elements.dealType.value = l.dealType||'Senior Secured';
+  // Lead deal types differ from Deal modal types — let user pick on the deal form
   f.elements.size.value = l.size||'';
   f.elements.coupon.value = l.coupon||'';
-  f.elements.tenor.value = l.tenor||'';
+  // tenor no longer captured at lead stage
   f.elements.startDate.value = new Date().toISOString().slice(0,10);
   f.dataset.fromLead = id;
 }
