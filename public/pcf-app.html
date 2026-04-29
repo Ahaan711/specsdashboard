@@ -1000,19 +1000,19 @@ function renderLeads(){
         </td>
       </tr>`}).join('');
   } else {
-    const stages = ['Active','Passive','Rejected','Lost','Closed'];
+    const stages = ['Active','Passive','Rejected – Stage 1','Rejected – Stage 2','Rejected – Stage 3','Lost','Closed'];
     document.getElementById('kanban').innerHTML = stages.map(s=>{
       const items = ls.filter(l=>l.stage===s);
       return `<div class="kcol"><h4>${s} <span>${items.length}</span></h4>
         ${items.map(l=>`<div class="kcard" onclick="editLead('${esc(l.id)}')">
           <div class="name">${esc(l.company)}</div>
-          <div class="meta"><span>₹${fmt(l.size)} Cr</span>${l.tenor?`<span>${(+l.tenor).toFixed(2)} yrs</span>`:''}</div>
+          <div class="meta"><span>₹${fmt(l.size)} Cr</span>${l.creditRating?`<span>${esc(l.creditRating)}</span>`:''}${l.stage==='Lost'&&l.lostTo?`<span style="color:var(--red-neg)">→ ${esc(l.lostTo)}</span>`:''}</div>
         </div>`).join('')}
       </div>`;
     }).join('');
   }
   // summary
-  const stages = ['Active','Passive','Rejected','Lost','Closed'];
+  const stages = ['Active','Passive','Rejected – Stage 1','Rejected – Stage 2','Rejected – Stage 3','Lost','Closed'];
   const total = ls.reduce((a,b)=>a+(+b.size||0),0);
   document.getElementById('pipelineSummary').innerHTML =
     stages.map(s=>`<div><span class="${stageClass(s)}">${s}</span> <b>${ls.filter(l=>l.stage===s).length}</b></div>`).join('') +
