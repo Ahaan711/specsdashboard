@@ -1068,11 +1068,55 @@ function applySectorSuggestion(data){
   } else if(hint) hint.textContent='';
 }
 
+function refreshReferrerDatalist(){
+  const dl = document.getElementById('referrerNamesList');
+  if(!dl) return;
+  const seen = new Set();
+  const opts = [];
+  (state.leads||[]).forEach(l=>{
+    const n = (l.referredBy||'').trim();
+    if(n && !seen.has(n.toLowerCase())){ seen.add(n.toLowerCase()); opts.push(n); }
+  });
+  dl.innerHTML = opts.map(n=>`<option value="${esc(n)}">`).join('');
+}
+function autoFillReferrerContact(){
+  const nameEl = document.getElementById('leadReferredBy');
+  const contactEl = document.getElementById('leadReferredContact');
+  if(!nameEl || !contactEl) return;
+  const n = (nameEl.value||'').trim().toLowerCase();
+  if(!n) return;
+  if((contactEl.value||'').trim()) return; // don't overwrite user input
+  const match = (state.leads||[]).find(l=> (l.referredBy||'').trim().toLowerCase()===n && (l.referredContact||'').trim());
+  if(match){ contactEl.value = match.referredContact; }
+}
+function toggleLostFields(stage){
+  const show = stage==='Lost';
+  const a = document.getElementById('lostToRow'); const b = document.getElementById('lostTermsRow');
+  if(a) a.style.display = show ? '' : 'none';
+  if(b) b.style.display = show ? '' : 'none';
+}
+function renderNotesHistory(notesLog){
+  const box = document.getElementById('leadNotesHistory');
+  if(!box) return;
+  if(!Array.isArray(notesLog) || !notesLog.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='';
+  box.innerHTML = notesLog.slice().reverse().map(n=>{
+    const d = new Date(n.ts);
+    const ts = isNaN(d) ? n.ts : d.toLocaleString();
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="color:var(--text-dim);font-size:11px">${esc(ts)}</div><div style="white-space:pre-wrap">${esc(n.text)}</div></div>`;
+  }).join('');
+}
+
 function openLeadModal(){
   document.getElementById('leadForm').reset();
   document.getElementById('leadForm').id.value = '';
   document.getElementById('sectorOtherRow').style.display='none';
   document.getElementById('dealTypeOtherRow').style.display='none';
+  toggleLostFields('');
+  renderNotesHistory([]);
+  const ratHint = document.getElementById('leadRatingRationaleHint'); if(ratHint) ratHint.textContent='';
+  const ratFile = document.getElementById('leadRatingRationaleFile'); if(ratFile) ratFile.value='';
+  refreshReferrerDatalist();
   const sel = document.getElementById('leadSectorSelect');
   if(sel){ sel.dataset.userTouched=''; sel.addEventListener('change', ()=>{ sel.dataset.userTouched='1'; }, { once:true }); }
   const hint = document.getElementById('sectorAiHint'); if(hint) hint.textContent='';
@@ -1082,40 +1126,84 @@ function openLeadModal(){
 function editLead(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
   const f = document.getElementById('leadForm');
-  // Detect custom sector/dealType not in dropdown
+  refreshReferrerDatalist();
   const sectorOpts = ['Real Estate','Infrastructure','Corporate','SME','Specialty Finance','NBFC / Lending','Fintech','Consumer','Agritech','Healthcare','Logistics','EdTech','Manufacturing','Technology / SaaS','Renewable Energy','Other'];
-  const dtOpts = ['Single Tranche','Multiple Tranches','Other'];
+  const dtOpts = ['Opco Deal','Promoter Financing','Acquisition Funding','Captable Consolidation','Others'];
   const sectorVal = sectorOpts.includes(l.sector) ? l.sector : 'Other';
-  const dtVal = dtOpts.includes(l.dealType) ? l.dealType : 'Other';
-  for(const k of Object.keys(l)){ if(f.elements[k]) f.elements[k].value = l[k]??'' }
+  const dtVal = dtOpts.includes(l.dealType) ? l.dealType : 'Others';
+  for(const k of Object.keys(l)){ if(f.elements[k] && k!=='notes') f.elements[k].value = l[k]??'' }
   f.elements.sector.value = sectorVal;
   f.elements.dealType.value = dtVal;
+  // Notes: input is for new entry only; show history below
+  if(f.elements.notes) f.elements.notes.value = '';
+  renderNotesHistory(l.notesLog || (l.notes ? [{ts:l.notesLogMigratedAt||new Date(0).toISOString(), text:l.notes}] : []));
+  // Rating rationale hint
+  const ratHint = document.getElementById('leadRatingRationaleHint');
+  const ratFile = document.getElementById('leadRatingRationaleFile'); if(ratFile) ratFile.value='';
+  if(ratHint){
+    if(l.ratingRationaleDocId){
+      const d = (state.documents||[]).find(x=>x.id===l.ratingRationaleDocId);
+      ratHint.innerHTML = d ? `📎 Current: <b>${esc(d.name)}</b> — upload to replace` : 'Previously uploaded file no longer available — upload to replace';
+    } else ratHint.textContent='No file uploaded yet';
+  }
   if(sectorVal==='Other'){ document.getElementById('sectorOtherRow').style.display=''; document.getElementById('sectorOther').value = l.sector==='Other'?'':l.sector; }
   else document.getElementById('sectorOtherRow').style.display='none';
-  if(dtVal==='Other'){ document.getElementById('dealTypeOtherRow').style.display=''; document.getElementById('dealTypeOther').value = l.dealType==='Other'?'':l.dealType; }
+  if(dtVal==='Others'){ document.getElementById('dealTypeOtherRow').style.display=''; document.getElementById('dealTypeOther').value = l.dealType==='Others'?'':l.dealType; }
   else document.getElementById('dealTypeOtherRow').style.display='none';
+  toggleLostFields(l.stage||'');
   document.querySelector('#leadModal h2 span').textContent = 'Edit Lead';
   document.getElementById('leadModal').classList.add('open');
 }
-function saveLead(e){
+async function saveLead(e){
   e.preventDefault();
   const fd = new FormData(e.target);
   const obj = Object.fromEntries(fd.entries());
   if(obj.sector==='Other' && (obj.sectorOther||'').trim()) obj.sector = obj.sectorOther.trim();
-  if(obj.dealType==='Other' && (obj.dealTypeOther||'').trim()) obj.dealType = obj.dealTypeOther.trim();
+  if(obj.dealType==='Others' && (obj.dealTypeOther||'').trim()) obj.dealType = obj.dealTypeOther.trim();
   delete obj.sectorOther; delete obj.dealTypeOther;
-  // Prompt for remarks when stage requires context
-  const needsRemark = ['Rejected','Passive','Lost'];
+  const isRejected = (obj.stage||'').startsWith('Rejected');
+  const needsRemark = isRejected || obj.stage==='Passive' || obj.stage==='Lost';
   const prev = obj.id ? state.leads.find(x=>x.id===obj.id) : null;
   const stageChanged = !prev || prev.stage !== obj.stage;
-  if(needsRemark.includes(obj.stage) && stageChanged && !(obj.remarks||'').trim()){
+  if(needsRemark && stageChanged && !(obj.remarks||'').trim()){
     const r = window.prompt(`This lead is being marked as "${obj.stage}".\nAdd a short remark (why? next steps?) — helpful for investor recall:`, prev?.remarks||'');
-    if(r===null){ return; } // cancelled
+    if(r===null){ return; }
     obj.remarks = r.trim();
   }
-  if(!obj.id){ obj.id = uid(); state.leads.push(obj); } else {
-    const i = state.leads.findIndex(x=>x.id===obj.id); if(i>=0) state.leads[i] = {...state.leads[i], ...obj};
+  if(obj.stage==='Lost' && !(obj.lostTo||'').trim()){
+    const lt = window.prompt('Lost to whom? (competitor / AIF / NBFC name)', prev?.lostTo||'');
+    if(lt===null) return;
+    obj.lostTo = lt.trim();
+    if(!(obj.lostTerms||'').trim()){
+      const kt = window.prompt('Key terms of the winning bid (rate / tenor / structure):', prev?.lostTerms||'');
+      if(kt!==null) obj.lostTerms = kt.trim();
+    }
   }
+  // Append timestamped note if user typed one in the input
+  const newNoteText = (obj.notes||'').trim();
+  delete obj.notes; // we manage notesLog separately
+  const baseLog = (prev && Array.isArray(prev.notesLog)) ? prev.notesLog.slice()
+    : (prev && prev.notes ? [{ts:new Date(0).toISOString(), text:prev.notes}] : []);
+  if(newNoteText){
+    baseLog.push({ts:new Date().toISOString(), text:newNoteText});
+  }
+  obj.notesLog = baseLog;
+  // Handle rating rationale upload
+  const ratFileEl = document.getElementById('leadRatingRationaleFile');
+  const ratFile = ratFileEl && ratFileEl.files && ratFileEl.files[0];
+  if(!obj.id) obj.id = uid();
+  if(ratFile){
+    try{
+      await saveDocument(ratFile, 'rating-rationale', { linkedLeadId: obj.id, linkedCompany: obj.company||'', note:`Rating Rationale${obj.creditRating?` (${obj.creditRating})`:''}` });
+      const justSaved = (state.documents||[]).find(d=>d.linkedLeadId===obj.id && d.kind==='rating-rationale');
+      if(justSaved) obj.ratingRationaleDocId = justSaved.id;
+    }catch(err){ console.error(err); toast('Could not attach rating rationale'); }
+  } else if(prev && prev.ratingRationaleDocId){
+    obj.ratingRationaleDocId = prev.ratingRationaleDocId;
+  }
+  const idx = state.leads.findIndex(x=>x.id===obj.id);
+  if(idx<0) state.leads.push(obj);
+  else state.leads[idx] = {...state.leads[idx], ...obj};
   save(); closeModal('leadModal'); renderLeads(); toast('Lead saved');
 }
 function editRemarks(id){
@@ -1126,14 +1214,20 @@ function editRemarks(id){
 }
 function quickChangeStage(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
-  const stages = ['Active','Passive','Rejected','Lost','Closed'];
-  const ns = window.prompt(`Change status for ${l.company}.\nOptions: ${stages.join(', ')}\nCurrent: ${l.stage}`, l.stage);
+  const stages = ['Active','Passive','Rejected – Stage 1','Rejected – Stage 2','Rejected – Stage 3','Lost','Closed'];
+  const ns = window.prompt(`Change status for ${l.company}.\nOptions:\n  ${stages.join('\n  ')}\nCurrent: ${l.stage}`, l.stage);
   if(!ns || !stages.includes(ns)) return;
   if(ns === l.stage) return;
   l.stage = ns;
-  if(['Rejected','Passive','Lost'].includes(ns)){
+  if(ns.startsWith('Rejected') || ns==='Passive' || ns==='Lost'){
     const r = window.prompt(`Marked as "${ns}". Add a remark for future recall:`, l.remarks||'');
     if(r!==null) l.remarks = r.trim();
+  }
+  if(ns==='Lost'){
+    const lt = window.prompt('Lost to whom? (competitor / AIF / NBFC name)', l.lostTo||'');
+    if(lt!==null) l.lostTo = lt.trim();
+    const kt = window.prompt('Key terms of the winning bid (rate / tenor / structure):', l.lostTerms||'');
+    if(kt!==null) l.lostTerms = kt.trim();
   }
   save(); renderLeads(); toast('Status updated');
 }
