@@ -579,8 +579,8 @@
       <datalist id="referrerNamesList"></datalist>
       <div class="form-row"><label>Referrer Contact (phone / email)</label><input name="referredContact" id="leadReferredContact" placeholder="+91… or name@firm.com"></div>
       <div class="form-row"><label>Credit Rating</label><input name="creditRating" placeholder="e.g. AA-, BBB+, Unrated"></div>
-      <div class="form-row"><label>Rating Rationale (PDF/Doc)</label>
-        <input type="file" id="leadRatingRationaleFile" accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg" style="font-size:12px">
+      <div class="form-row"><label>Rating Rationale (PDF/Doc) <span style="font-weight:400;color:var(--muted);font-size:11px">— rating auto-extracted on upload</span></label>
+        <input type="file" id="leadRatingRationaleFile" accept=".pdf,.docx,.doc,.txt" style="font-size:12px" onchange="autoExtractRating(this)">
         <div id="leadRatingRationaleHint" style="font-size:11px;color:var(--text-dim);margin-top:4px"></div>
       </div>
       <div class="form-row"><label>Status *</label><select name="stage" required onchange="toggleLostFields(this.value)">
@@ -1255,6 +1255,67 @@ async function saveLead(e){
   if(idx<0) state.leads.push(obj);
   else state.leads[idx] = {...state.leads[idx], ...obj};
   save(); closeModal('leadModal'); renderLeads(); toast('Lead saved');
+}
+
+async function _extractTextFromFile(file){
+  const name = (file.name||'').toLowerCase();
+  if(name.endsWith('.pdf')){
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+    let text = '';
+    const maxPages = Math.min(pdf.numPages, 15);
+    for(let i=1;i<=maxPages;i++){
+      const page = await pdf.getPage(i);
+      const tc = await page.getTextContent();
+      text += tc.items.map(it=>it.str).join(' ')+'\n';
+    }
+    return text;
+  } else if(name.endsWith('.docx')){
+    const buf = await file.arrayBuffer();
+    const r = await mammoth.extractRawText({arrayBuffer:buf});
+    return r.value || '';
+  } else {
+    return await file.text();
+  }
+}
+
+async function autoExtractRating(inputEl){
+  const file = inputEl && inputEl.files && inputEl.files[0];
+  if(!file) return;
+  const hint = document.getElementById('leadRatingRationaleHint');
+  const ratingInput = document.querySelector('#leadForm input[name="creditRating"]');
+  if(hint) hint.innerHTML = '⏳ Reading document and extracting rating…';
+  try{
+    const text = await _extractTextFromFile(file);
+    if(!text || text.trim().length < 20){
+      if(hint) hint.innerHTML = '⚠️ Could not read text from this file — please enter rating manually';
+      return;
+    }
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/extract-credit-rating`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ text, fileName: file.name }),
+    });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      if(hint) hint.innerHTML = `⚠️ ${esc(err.error||'Extraction failed')} — enter rating manually`;
+      return;
+    }
+    const data = await r.json();
+    if(data.rating && ratingInput){
+      const existing = (ratingInput.value||'').trim();
+      if(!existing || window.confirm(`Replace "${existing}" with extracted rating "${data.rating}"?`)){
+        ratingInput.value = data.rating;
+      }
+      if(hint) hint.innerHTML = `✅ Extracted: <b>${esc(data.rating)}</b>${data.agency?` (${esc(data.agency)})`:''} — confidence: ${esc(data.confidence||'low')}`;
+      toast('Credit rating auto-filled');
+    } else {
+      if(hint) hint.innerHTML = '⚠️ No rating found in document — please enter manually';
+    }
+  }catch(err){
+    console.error('autoExtractRating', err);
+    if(hint) hint.innerHTML = '⚠️ Error reading file — please enter rating manually';
+  }
 }
 function editRemarks(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
