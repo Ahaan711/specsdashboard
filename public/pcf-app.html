@@ -975,11 +975,12 @@ function renderLeads(){
   const ls = filterLeads();
   if(leadView==='table'){
     const tb = document.getElementById('leadsTbody');
-    if(!ls.length){tb.innerHTML='<tr><td colspan="12" class="empty">No leads. Click "+ Add Lead" to get started.</td></tr>'}
+    if(!ls.length){tb.innerHTML='<tr><td colspan="11" class="empty">No leads. Click "+ Add Lead" to get started.</td></tr>'}
     else tb.innerHTML = ls.map((l,i)=>{
       const refLine = l.referredBy ? `<b>${esc(l.referredBy)}</b>${l.referredContact?`<div style="font-size:11px;color:var(--text-dim)">${esc(l.referredContact)}</div>`:''}` : '—';
-      const remarksTxt = (l.remarks||l.notes||'').trim();
+      const remarksTxt = (l.remarks||'').trim();
       const remarksShort = remarksTxt ? (remarksTxt.length>80?esc(remarksTxt.slice(0,80))+'…':esc(remarksTxt)) : '<span style="color:var(--text-dim)">—</span>';
+      const lostLine = l.stage==='Lost' && l.lostTo ? `<div style="font-size:11px;color:var(--text-dim)">Lost to: ${esc(l.lostTo)}</div>` : '';
       return `
       <tr>
         <td>${i+1}</td>
@@ -989,10 +990,9 @@ function renderLeads(){
         <td>${esc(l.primaryPerson||'—')}${l.secondaryPerson?`<div style="font-size:11px;color:var(--text-dim)">2°: ${esc(l.secondaryPerson)}</div>`:''}</td>
         <td>${refLine}</td>
         <td class="num">${fmt(l.size)}</td>
-        <td class="num">${l.tenor?(+l.tenor).toFixed(2):'—'}</td>
-        <td>${esc(l.useOfFunds||'—')}</td>
-        <td><span class="${stageClass(l.stage)}" style="cursor:pointer" onclick="quickChangeStage('${l.id}')" title="Click to change status">${esc(l.stage)}</span></td>
-        <td title="${esc(remarksTxt)}" style="max-width:240px;cursor:pointer" onclick="editRemarks('${l.id}')">${remarksShort}</td>
+        <td>${esc(l.creditRating||'—')}</td>
+        <td><span class="${stageClass(l.stage)}" style="cursor:pointer" onclick="quickChangeStage('${esc(l.id)}')" title="Click to change status">${esc(l.stage)}</span>${lostLine}</td>
+        <td title="${esc(remarksTxt)}" style="max-width:240px;cursor:pointer" onclick="editRemarks('${esc(l.id)}')">${remarksShort}</td>
         <td class="actions">
           <button class="btn btn-ghost btn-sm" onclick="editLead('${esc(l.id)}')">Edit</button>
          ${l.stage==='Closed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${esc(l.id)}')">→ Deal</button>`:''}
