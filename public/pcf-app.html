@@ -707,7 +707,7 @@ function _stateSnapshot(){
 }
 function _hydrateFrom(payload){
   if(!payload || typeof payload !== 'object') return;
-  if(Array.isArray(payload.leads)) state.leads = payload.leads;
+  if(Array.isArray(payload.leads)) state.leads = payload.leads.map(l=>l&&l.stage==='Completed'?{...l,stage:'Closed'}:l);
   if(Array.isArray(payload.deals)) state.deals = payload.deals;
   if(payload.cashflows && typeof payload.cashflows==='object') state.cashflows = payload.cashflows;
   if(payload.fund && typeof payload.fund==='object') state.fund = payload.fund;
