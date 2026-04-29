@@ -1,1 +1,4 @@
 project_id = "ablomcksgyilrffmvojp"
+
+[functions.extract-credit-rating]
+verify_jwt = false
