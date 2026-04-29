@@ -312,7 +312,8 @@
     <input id="leadSearch" placeholder="Search company or notes..." class="grow" oninput="renderLeads()">
     <select id="leadFilterStage" onchange="renderLeads()">
       <option value="">Status</option>
-      <option>Active</option><option>Passive</option><option>Rejected</option>
+      <option>Active</option><option>Passive</option>
+      <option>Rejected – Stage 1</option><option>Rejected – Stage 2</option><option>Rejected – Stage 3</option>
       <option>Lost</option><option>Closed</option>
     </select>
     <select id="leadFilterSector" onchange="renderLeads()">
@@ -326,7 +327,8 @@
     </select>
     <select id="leadFilterDealType" onchange="renderLeads()">
       <option value="">All Deal Types</option>
-      <option>Single Tranche</option><option>Multiple Tranches</option><option>Other</option>
+      <option>Opco Deal</option><option>Promoter Financing</option><option>Acquisition Funding</option>
+      <option>Captable Consolidation</option><option>Others</option>
     </select>
     <div class="seg">
       <button id="viewTable" class="active" onclick="setLeadView('table')">Table</button>
@@ -340,8 +342,8 @@
         <thead><tr>
           <th>Sr</th><th>Company</th><th>Sector</th><th>Deal Type</th>
           <th>Primary</th><th>Referred By</th>
-          <th class="num">Size (₹Cr)</th><th class="num">Tenor (yrs)</th>
-          <th>Use of Funds</th>
+          <th class="num">Size (₹Cr)</th>
+          <th>Rating</th>
           <th>Status</th><th>Remarks</th><th>Actions</th>
         </tr></thead>
         <tbody id="leadsTbody"></tbody>
@@ -356,6 +358,11 @@
   <div class="card" style="margin-top:16px">
     <h3>Pipeline Summary</h3>
     <div id="pipelineSummary" style="display:flex;flex-wrap:wrap;gap:18px;font-size:13px"></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>Quarterly Review — Rejected / Lost Deals <span style="font-weight:400;color:var(--muted);font-size:12px">(competitor & market intelligence)</span></h3>
+    <div id="quarterlyReview" style="font-size:13px"></div>
   </div>
 </section>
 
@@ -561,22 +568,33 @@
         <option>Other</option></select></div>
       <div class="form-row" id="sectorOtherRow" style="display:none"><label>Specify Sector *</label><input name="sectorOther" id="sectorOther" placeholder="Enter custom sector"></div>
       <div class="form-row"><label>Deal Type *</label><select name="dealType" required onchange="toggleOther(this,'dealTypeOther')">
-        <option>Single Tranche</option><option>Multiple Tranches</option><option>Other</option></select></div>
+        <option>Opco Deal</option><option>Promoter Financing</option><option>Acquisition Funding</option>
+        <option>Captable Consolidation</option><option>Others</option></select></div>
       <div class="form-row" id="dealTypeOtherRow" style="display:none"><label>Specify Deal Type *</label><input name="dealTypeOther" id="dealTypeOther" placeholder="Enter custom deal type"></div>
       <div class="form-row"><label>Deal Size (₹ Cr) *</label><input type="number" step="0.01" name="size" required></div>
-      <div class="form-row"><label>Tenor (years)</label><input type="number" step="0.01" name="tenor" placeholder="e.g. 3"></div>
-      
+
       <div class="form-row"><label>Primary Person (case owner) *</label><input name="primaryPerson" required placeholder="Internal lead"></div>
       <div class="form-row"><label>Secondary Person</label><input name="secondaryPerson"></div>
-      <div class="form-row"><label>Referred By</label><input name="referredBy" placeholder="Arranger / referrer name"></div>
-      <div class="form-row"><label>Referrer Contact (phone / email)</label><input name="referredContact" placeholder="+91… or name@firm.com"></div>
-      <div class="form-row full"><label>Use of Funds</label><input name="useOfFunds" placeholder="e.g. Working capital, capex, refinancing"></div>
-      <div class="form-row"><label>Status *</label><select name="stage" required>
-        <option>Active</option><option>Passive</option><option>Rejected</option>
+      <div class="form-row"><label>Referred By</label><input name="referredBy" id="leadReferredBy" list="referrerNamesList" placeholder="Arranger / referrer name" onchange="autoFillReferrerContact()" onblur="autoFillReferrerContact()"></div>
+      <datalist id="referrerNamesList"></datalist>
+      <div class="form-row"><label>Referrer Contact (phone / email)</label><input name="referredContact" id="leadReferredContact" placeholder="+91… or name@firm.com"></div>
+      <div class="form-row"><label>Credit Rating</label><input name="creditRating" placeholder="e.g. AA-, BBB+, Unrated"></div>
+      <div class="form-row"><label>Rating Rationale (PDF/Doc)</label>
+        <input type="file" id="leadRatingRationaleFile" accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg" style="font-size:12px">
+        <div id="leadRatingRationaleHint" style="font-size:11px;color:var(--text-dim);margin-top:4px"></div>
+      </div>
+      <div class="form-row"><label>Status *</label><select name="stage" required onchange="toggleLostFields(this.value)">
+        <option>Active</option><option>Passive</option>
+        <option>Rejected – Stage 1</option><option>Rejected – Stage 2</option><option>Rejected – Stage 3</option>
         <option>Lost</option><option>Closed</option></select></div>
-      <div class="form-row"><label>Potential Structure</label><input name="structure" placeholder="e.g. NCD, Term Loan"></div>
-      <div class="form-row full"><label>Remarks <span style="font-weight:400;color:var(--muted);font-size:11px">(why rejected / passive, key context for investor calls)</span></label><textarea name="remarks" placeholder="e.g. Rejected due to weak collateral coverage; revisit Q3"></textarea></div>
-      <div class="form-row full"><label>Internal Notes</label><textarea name="notes"></textarea></div>
+      <div class="form-row" id="lostToRow" style="display:none"><label>Lost To (Competitor)</label><input name="lostTo" placeholder="e.g. ABC AIF / XYZ NBFC"></div>
+      <div class="form-row full" id="lostTermsRow" style="display:none"><label>Key Terms of Winning Bid</label><input name="lostTerms" placeholder="e.g. 13.5% / 36m / Senior Secured / 1.5x cover"></div>
+      <div class="form-row full"><label>Remarks <span style="font-weight:400;color:var(--muted);font-size:11px">(why rejected / passive, key context for investor calls)</span></label><textarea name="remarks" placeholder="e.g. Rejected at IC due to weak collateral coverage; revisit Q3"></textarea></div>
+      <div class="form-row full">
+        <label>Internal Notes <span style="font-weight:400;color:var(--muted);font-size:11px">(timestamped log — each save appends a new entry)</span></label>
+        <textarea name="notes" id="leadNotesInput" placeholder="Add a new note — will be timestamped on save"></textarea>
+        <div id="leadNotesHistory" style="margin-top:8px;max-height:180px;overflow-y:auto;font-size:12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:6px;padding:8px;display:none"></div>
+      </div>
     </div>
     <input type="hidden" name="id">
     <div class="modal-actions">
@@ -962,11 +980,12 @@ function renderLeads(){
   const ls = filterLeads();
   if(leadView==='table'){
     const tb = document.getElementById('leadsTbody');
-    if(!ls.length){tb.innerHTML='<tr><td colspan="12" class="empty">No leads. Click "+ Add Lead" to get started.</td></tr>'}
+    if(!ls.length){tb.innerHTML='<tr><td colspan="11" class="empty">No leads. Click "+ Add Lead" to get started.</td></tr>'}
     else tb.innerHTML = ls.map((l,i)=>{
       const refLine = l.referredBy ? `<b>${esc(l.referredBy)}</b>${l.referredContact?`<div style="font-size:11px;color:var(--text-dim)">${esc(l.referredContact)}</div>`:''}` : '—';
-      const remarksTxt = (l.remarks||l.notes||'').trim();
+      const remarksTxt = (l.remarks||'').trim();
       const remarksShort = remarksTxt ? (remarksTxt.length>80?esc(remarksTxt.slice(0,80))+'…':esc(remarksTxt)) : '<span style="color:var(--text-dim)">—</span>';
+      const lostLine = l.stage==='Lost' && l.lostTo ? `<div style="font-size:11px;color:var(--text-dim)">Lost to: ${esc(l.lostTo)}</div>` : '';
       return `
       <tr>
         <td>${i+1}</td>
@@ -976,10 +995,9 @@ function renderLeads(){
         <td>${esc(l.primaryPerson||'—')}${l.secondaryPerson?`<div style="font-size:11px;color:var(--text-dim)">2°: ${esc(l.secondaryPerson)}</div>`:''}</td>
         <td>${refLine}</td>
         <td class="num">${fmt(l.size)}</td>
-        <td class="num">${l.tenor?(+l.tenor).toFixed(2):'—'}</td>
-        <td>${esc(l.useOfFunds||'—')}</td>
-        <td><span class="${stageClass(l.stage)}" style="cursor:pointer" onclick="quickChangeStage('${l.id}')" title="Click to change status">${esc(l.stage)}</span></td>
-        <td title="${esc(remarksTxt)}" style="max-width:240px;cursor:pointer" onclick="editRemarks('${l.id}')">${remarksShort}</td>
+        <td>${esc(l.creditRating||'—')}</td>
+        <td><span class="${stageClass(l.stage)}" style="cursor:pointer" onclick="quickChangeStage('${esc(l.id)}')" title="Click to change status">${esc(l.stage)}</span>${lostLine}</td>
+        <td title="${esc(remarksTxt)}" style="max-width:240px;cursor:pointer" onclick="editRemarks('${esc(l.id)}')">${remarksShort}</td>
         <td class="actions">
           <button class="btn btn-ghost btn-sm" onclick="editLead('${esc(l.id)}')">Edit</button>
          ${l.stage==='Closed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${esc(l.id)}')">→ Deal</button>`:''}
@@ -987,23 +1005,68 @@ function renderLeads(){
         </td>
       </tr>`}).join('');
   } else {
-    const stages = ['Active','Passive','Rejected','Lost','Closed'];
+    const stages = ['Active','Passive','Rejected – Stage 1','Rejected – Stage 2','Rejected – Stage 3','Lost','Closed'];
     document.getElementById('kanban').innerHTML = stages.map(s=>{
       const items = ls.filter(l=>l.stage===s);
       return `<div class="kcol"><h4>${s} <span>${items.length}</span></h4>
         ${items.map(l=>`<div class="kcard" onclick="editLead('${esc(l.id)}')">
           <div class="name">${esc(l.company)}</div>
-          <div class="meta"><span>₹${fmt(l.size)} Cr</span>${l.tenor?`<span>${(+l.tenor).toFixed(2)} yrs</span>`:''}</div>
+          <div class="meta"><span>₹${fmt(l.size)} Cr</span>${l.creditRating?`<span>${esc(l.creditRating)}</span>`:''}${l.stage==='Lost'&&l.lostTo?`<span style="color:var(--red-neg)">→ ${esc(l.lostTo)}</span>`:''}</div>
         </div>`).join('')}
       </div>`;
     }).join('');
   }
   // summary
-  const stages = ['Active','Passive','Rejected','Lost','Closed'];
+  const stages = ['Active','Passive','Rejected – Stage 1','Rejected – Stage 2','Rejected – Stage 3','Lost','Closed'];
   const total = ls.reduce((a,b)=>a+(+b.size||0),0);
   document.getElementById('pipelineSummary').innerHTML =
     stages.map(s=>`<div><span class="${stageClass(s)}">${s}</span> <b>${ls.filter(l=>l.stage===s).length}</b></div>`).join('') +
     `<div style="margin-left:auto"><span style="color:var(--text-dim)">Total Pipeline:</span> <b>₹${fmt(total)} Cr</b></div>`;
+  renderQuarterlyReview();
+}
+function renderQuarterlyReview(){
+  const box = document.getElementById('quarterlyReview');
+  if(!box) return;
+  const lostRej = (state.leads||[]).filter(l=> l.stage==='Lost' || (l.stage||'').startsWith('Rejected'));
+  if(!lostRej.length){ box.innerHTML = '<div style="color:var(--text-dim)">No rejected or lost deals yet.</div>'; return; }
+  const ninetyDaysAgo = Date.now() - 90*24*60*60*1000;
+  const lastTouch = (l)=>{
+    const log = l.notesLog||[];
+    if(log.length){ const t = new Date(log[log.length-1].ts).getTime(); if(!isNaN(t)) return t; }
+    return l.updatedAt ? new Date(l.updatedAt).getTime() : 0;
+  };
+  const stale = lostRej.filter(l=> lastTouch(l) < ninetyDaysAgo || !(l.lostTo||'').trim() && l.stage==='Lost');
+  // Competitor tally
+  const tally = {};
+  lostRej.forEach(l=>{ const c = (l.lostTo||'').trim(); if(c) tally[c] = (tally[c]||0) + (+l.size||0); });
+  const tallyRows = Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  box.innerHTML = `
+    <div style="display:flex;gap:24px;flex-wrap:wrap">
+      <div style="flex:1;min-width:280px">
+        <div style="color:var(--text-dim);font-size:12px;margin-bottom:6px">Competitors winning our deals (₹ Cr)</div>
+        ${tallyRows.length ? `<table style="width:100%;font-size:13px"><tbody>${tallyRows.map(([c,v])=>`<tr><td>${esc(c)}</td><td class="num"><b>₹${fmt(v)}</b></td></tr>`).join('')}</tbody></table>` : '<div style="color:var(--text-dim)">No competitor names captured yet.</div>'}
+      </div>
+      <div style="flex:1;min-width:300px">
+        <div style="color:var(--text-dim);font-size:12px;margin-bottom:6px">Needs refresh (>90d or missing competitor) — ${stale.length}</div>
+        ${stale.length ? `<div style="max-height:200px;overflow-y:auto">${stale.slice(0,15).map(l=>`
+          <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+            <div style="flex:1"><b>${esc(l.company)}</b> <span class="${stageClass(l.stage)}" style="font-size:10px">${esc(l.stage)}</span><div style="font-size:11px;color:var(--text-dim)">${l.lostTo?'Lost to: '+esc(l.lostTo):'Competitor not captured'}</div></div>
+            <button class="btn btn-ghost btn-sm" onclick="refreshCompetitorIntel('${esc(l.id)}')">Update</button>
+          </div>`).join('')}</div>` : '<div style="color:var(--green-pos)">All up to date ✓</div>'}
+      </div>
+    </div>`;
+}
+function refreshCompetitorIntel(id){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  const lt = window.prompt(`Quarterly refresh — ${l.company}\nWho ultimately did this deal? (AIF / NBFC / bank)`, l.lostTo||'');
+  if(lt===null) return;
+  l.lostTo = lt.trim();
+  const kt = window.prompt('Key terms of the trade (rate / tenor / structure / cover):', l.lostTerms||'');
+  if(kt!==null) l.lostTerms = kt.trim();
+  // append a timestamped note for audit
+  l.notesLog = l.notesLog || [];
+  l.notesLog.push({ts:new Date().toISOString(), text:`Quarterly review: market intel updated — ${l.lostTo||'(competitor unknown)'}${l.lostTerms?` | terms: ${l.lostTerms}`:''}`});
+  save(); renderLeads(); toast('Market intel updated');
 }
 function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
@@ -1055,11 +1118,55 @@ function applySectorSuggestion(data){
   } else if(hint) hint.textContent='';
 }
 
+function refreshReferrerDatalist(){
+  const dl = document.getElementById('referrerNamesList');
+  if(!dl) return;
+  const seen = new Set();
+  const opts = [];
+  (state.leads||[]).forEach(l=>{
+    const n = (l.referredBy||'').trim();
+    if(n && !seen.has(n.toLowerCase())){ seen.add(n.toLowerCase()); opts.push(n); }
+  });
+  dl.innerHTML = opts.map(n=>`<option value="${esc(n)}">`).join('');
+}
+function autoFillReferrerContact(){
+  const nameEl = document.getElementById('leadReferredBy');
+  const contactEl = document.getElementById('leadReferredContact');
+  if(!nameEl || !contactEl) return;
+  const n = (nameEl.value||'').trim().toLowerCase();
+  if(!n) return;
+  if((contactEl.value||'').trim()) return; // don't overwrite user input
+  const match = (state.leads||[]).find(l=> (l.referredBy||'').trim().toLowerCase()===n && (l.referredContact||'').trim());
+  if(match){ contactEl.value = match.referredContact; }
+}
+function toggleLostFields(stage){
+  const show = stage==='Lost';
+  const a = document.getElementById('lostToRow'); const b = document.getElementById('lostTermsRow');
+  if(a) a.style.display = show ? '' : 'none';
+  if(b) b.style.display = show ? '' : 'none';
+}
+function renderNotesHistory(notesLog){
+  const box = document.getElementById('leadNotesHistory');
+  if(!box) return;
+  if(!Array.isArray(notesLog) || !notesLog.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='';
+  box.innerHTML = notesLog.slice().reverse().map(n=>{
+    const d = new Date(n.ts);
+    const ts = isNaN(d) ? n.ts : d.toLocaleString();
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="color:var(--text-dim);font-size:11px">${esc(ts)}</div><div style="white-space:pre-wrap">${esc(n.text)}</div></div>`;
+  }).join('');
+}
+
 function openLeadModal(){
   document.getElementById('leadForm').reset();
   document.getElementById('leadForm').id.value = '';
   document.getElementById('sectorOtherRow').style.display='none';
   document.getElementById('dealTypeOtherRow').style.display='none';
+  toggleLostFields('');
+  renderNotesHistory([]);
+  const ratHint = document.getElementById('leadRatingRationaleHint'); if(ratHint) ratHint.textContent='';
+  const ratFile = document.getElementById('leadRatingRationaleFile'); if(ratFile) ratFile.value='';
+  refreshReferrerDatalist();
   const sel = document.getElementById('leadSectorSelect');
   if(sel){ sel.dataset.userTouched=''; sel.addEventListener('change', ()=>{ sel.dataset.userTouched='1'; }, { once:true }); }
   const hint = document.getElementById('sectorAiHint'); if(hint) hint.textContent='';
@@ -1069,40 +1176,84 @@ function openLeadModal(){
 function editLead(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
   const f = document.getElementById('leadForm');
-  // Detect custom sector/dealType not in dropdown
+  refreshReferrerDatalist();
   const sectorOpts = ['Real Estate','Infrastructure','Corporate','SME','Specialty Finance','NBFC / Lending','Fintech','Consumer','Agritech','Healthcare','Logistics','EdTech','Manufacturing','Technology / SaaS','Renewable Energy','Other'];
-  const dtOpts = ['Single Tranche','Multiple Tranches','Other'];
+  const dtOpts = ['Opco Deal','Promoter Financing','Acquisition Funding','Captable Consolidation','Others'];
   const sectorVal = sectorOpts.includes(l.sector) ? l.sector : 'Other';
-  const dtVal = dtOpts.includes(l.dealType) ? l.dealType : 'Other';
-  for(const k of Object.keys(l)){ if(f.elements[k]) f.elements[k].value = l[k]??'' }
+  const dtVal = dtOpts.includes(l.dealType) ? l.dealType : 'Others';
+  for(const k of Object.keys(l)){ if(f.elements[k] && k!=='notes') f.elements[k].value = l[k]??'' }
   f.elements.sector.value = sectorVal;
   f.elements.dealType.value = dtVal;
+  // Notes: input is for new entry only; show history below
+  if(f.elements.notes) f.elements.notes.value = '';
+  renderNotesHistory(l.notesLog || (l.notes ? [{ts:l.notesLogMigratedAt||new Date(0).toISOString(), text:l.notes}] : []));
+  // Rating rationale hint
+  const ratHint = document.getElementById('leadRatingRationaleHint');
+  const ratFile = document.getElementById('leadRatingRationaleFile'); if(ratFile) ratFile.value='';
+  if(ratHint){
+    if(l.ratingRationaleDocId){
+      const d = (state.documents||[]).find(x=>x.id===l.ratingRationaleDocId);
+      ratHint.innerHTML = d ? `📎 Current: <b>${esc(d.name)}</b> — upload to replace` : 'Previously uploaded file no longer available — upload to replace';
+    } else ratHint.textContent='No file uploaded yet';
+  }
   if(sectorVal==='Other'){ document.getElementById('sectorOtherRow').style.display=''; document.getElementById('sectorOther').value = l.sector==='Other'?'':l.sector; }
   else document.getElementById('sectorOtherRow').style.display='none';
-  if(dtVal==='Other'){ document.getElementById('dealTypeOtherRow').style.display=''; document.getElementById('dealTypeOther').value = l.dealType==='Other'?'':l.dealType; }
+  if(dtVal==='Others'){ document.getElementById('dealTypeOtherRow').style.display=''; document.getElementById('dealTypeOther').value = l.dealType==='Others'?'':l.dealType; }
   else document.getElementById('dealTypeOtherRow').style.display='none';
+  toggleLostFields(l.stage||'');
   document.querySelector('#leadModal h2 span').textContent = 'Edit Lead';
   document.getElementById('leadModal').classList.add('open');
 }
-function saveLead(e){
+async function saveLead(e){
   e.preventDefault();
   const fd = new FormData(e.target);
   const obj = Object.fromEntries(fd.entries());
   if(obj.sector==='Other' && (obj.sectorOther||'').trim()) obj.sector = obj.sectorOther.trim();
-  if(obj.dealType==='Other' && (obj.dealTypeOther||'').trim()) obj.dealType = obj.dealTypeOther.trim();
+  if(obj.dealType==='Others' && (obj.dealTypeOther||'').trim()) obj.dealType = obj.dealTypeOther.trim();
   delete obj.sectorOther; delete obj.dealTypeOther;
-  // Prompt for remarks when stage requires context
-  const needsRemark = ['Rejected','Passive','Lost'];
+  const isRejected = (obj.stage||'').startsWith('Rejected');
+  const needsRemark = isRejected || obj.stage==='Passive' || obj.stage==='Lost';
   const prev = obj.id ? state.leads.find(x=>x.id===obj.id) : null;
   const stageChanged = !prev || prev.stage !== obj.stage;
-  if(needsRemark.includes(obj.stage) && stageChanged && !(obj.remarks||'').trim()){
+  if(needsRemark && stageChanged && !(obj.remarks||'').trim()){
     const r = window.prompt(`This lead is being marked as "${obj.stage}".\nAdd a short remark (why? next steps?) — helpful for investor recall:`, prev?.remarks||'');
-    if(r===null){ return; } // cancelled
+    if(r===null){ return; }
     obj.remarks = r.trim();
   }
-  if(!obj.id){ obj.id = uid(); state.leads.push(obj); } else {
-    const i = state.leads.findIndex(x=>x.id===obj.id); if(i>=0) state.leads[i] = {...state.leads[i], ...obj};
+  if(obj.stage==='Lost' && !(obj.lostTo||'').trim()){
+    const lt = window.prompt('Lost to whom? (competitor / AIF / NBFC name)', prev?.lostTo||'');
+    if(lt===null) return;
+    obj.lostTo = lt.trim();
+    if(!(obj.lostTerms||'').trim()){
+      const kt = window.prompt('Key terms of the winning bid (rate / tenor / structure):', prev?.lostTerms||'');
+      if(kt!==null) obj.lostTerms = kt.trim();
+    }
   }
+  // Append timestamped note if user typed one in the input
+  const newNoteText = (obj.notes||'').trim();
+  delete obj.notes; // we manage notesLog separately
+  const baseLog = (prev && Array.isArray(prev.notesLog)) ? prev.notesLog.slice()
+    : (prev && prev.notes ? [{ts:new Date(0).toISOString(), text:prev.notes}] : []);
+  if(newNoteText){
+    baseLog.push({ts:new Date().toISOString(), text:newNoteText});
+  }
+  obj.notesLog = baseLog;
+  // Handle rating rationale upload
+  const ratFileEl = document.getElementById('leadRatingRationaleFile');
+  const ratFile = ratFileEl && ratFileEl.files && ratFileEl.files[0];
+  if(!obj.id) obj.id = uid();
+  if(ratFile){
+    try{
+      await saveDocument(ratFile, 'rating-rationale', { linkedLeadId: obj.id, linkedCompany: obj.company||'', note:`Rating Rationale${obj.creditRating?` (${obj.creditRating})`:''}` });
+      const justSaved = (state.documents||[]).find(d=>d.linkedLeadId===obj.id && d.kind==='rating-rationale');
+      if(justSaved) obj.ratingRationaleDocId = justSaved.id;
+    }catch(err){ console.error(err); toast('Could not attach rating rationale'); }
+  } else if(prev && prev.ratingRationaleDocId){
+    obj.ratingRationaleDocId = prev.ratingRationaleDocId;
+  }
+  const idx = state.leads.findIndex(x=>x.id===obj.id);
+  if(idx<0) state.leads.push(obj);
+  else state.leads[idx] = {...state.leads[idx], ...obj};
   save(); closeModal('leadModal'); renderLeads(); toast('Lead saved');
 }
 function editRemarks(id){
@@ -1113,14 +1264,20 @@ function editRemarks(id){
 }
 function quickChangeStage(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
-  const stages = ['Active','Passive','Rejected','Lost','Closed'];
-  const ns = window.prompt(`Change status for ${l.company}.\nOptions: ${stages.join(', ')}\nCurrent: ${l.stage}`, l.stage);
+  const stages = ['Active','Passive','Rejected – Stage 1','Rejected – Stage 2','Rejected – Stage 3','Lost','Closed'];
+  const ns = window.prompt(`Change status for ${l.company}.\nOptions:\n  ${stages.join('\n  ')}\nCurrent: ${l.stage}`, l.stage);
   if(!ns || !stages.includes(ns)) return;
   if(ns === l.stage) return;
   l.stage = ns;
-  if(['Rejected','Passive','Lost'].includes(ns)){
+  if(ns.startsWith('Rejected') || ns==='Passive' || ns==='Lost'){
     const r = window.prompt(`Marked as "${ns}". Add a remark for future recall:`, l.remarks||'');
     if(r!==null) l.remarks = r.trim();
+  }
+  if(ns==='Lost'){
+    const lt = window.prompt('Lost to whom? (competitor / AIF / NBFC name)', l.lostTo||'');
+    if(lt!==null) l.lostTo = lt.trim();
+    const kt = window.prompt('Key terms of the winning bid (rate / tenor / structure):', l.lostTerms||'');
+    if(kt!==null) l.lostTerms = kt.trim();
   }
   save(); renderLeads(); toast('Status updated');
 }
@@ -1134,10 +1291,10 @@ function convertLead(id){
   const f = document.getElementById('dealForm');
   f.elements.company.value = l.company||'';
   f.elements.sector.value = l.sector||'Corporate';
-  f.elements.dealType.value = l.dealType||'Senior Secured';
+  // Lead deal types differ from Deal modal types — let user pick on the deal form
   f.elements.size.value = l.size||'';
   f.elements.coupon.value = l.coupon||'';
-  f.elements.tenor.value = l.tenor||'';
+  // tenor no longer captured at lead stage
   f.elements.startDate.value = new Date().toISOString().slice(0,10);
   f.dataset.fromLead = id;
 }
@@ -1691,14 +1848,20 @@ function downloadCSV(rows, name){
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
 }
 function exportLeadsCSV(){
-  const cols=['company','sector','dealType','size','tenor','primaryPerson','secondaryPerson','referredBy','referredContact','useOfFunds','stage','structure','notes'];
-  downloadCSV([cols, ...state.leads.map(l=>cols.map(c=>l[c]||''))],'leads.csv');
+  const cols=['company','sector','dealType','size','primaryPerson','secondaryPerson','referredBy','referredContact','creditRating','stage','lostTo','lostTerms','remarks','notes'];
+  downloadCSV([cols, ...state.leads.map(l=>cols.map(c=>{
+    if(c==='notes') return (l.notesLog||[]).map(n=>`[${n.ts}] ${n.text}`).join(' | ') || (l.notes||'');
+    return l[c]||'';
+  }))],'leads.csv');
 }
 function exportXLSX(){
   const wb = XLSX.utils.book_new();
   // leads
-  const leadCols=['id','company','sector','dealType','size','tenor','primaryPerson','secondaryPerson','referredBy','referredContact','useOfFunds','stage','structure','notes'];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.leads.map(l=>{const o={};leadCols.forEach(c=>o[c]=l[c]||'');return o})), 'Leads');
+  const leadCols=['id','company','sector','dealType','size','primaryPerson','secondaryPerson','referredBy','referredContact','creditRating','stage','lostTo','lostTerms','remarks','notes'];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.leads.map(l=>{const o={};leadCols.forEach(c=>{
+    if(c==='notes') o[c] = (l.notesLog||[]).map(n=>`[${n.ts}] ${n.text}`).join(' | ') || (l.notes||'');
+    else o[c]=l[c]||'';
+  });return o})), 'Leads');
   // deals
   const dealCols=['id','company','sector','dealType','size','invested','coupon','tenor','startDate','repayType','amortFreq','moratorium','upfrontFee','status','rating','security','xirrOverride','covenants'];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.deals.map(d=>{const o={};dealCols.forEach(c=>o[c]=d[c]||'');return o})), 'Deals');
