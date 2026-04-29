@@ -563,22 +563,33 @@
         <option>Other</option></select></div>
       <div class="form-row" id="sectorOtherRow" style="display:none"><label>Specify Sector *</label><input name="sectorOther" id="sectorOther" placeholder="Enter custom sector"></div>
       <div class="form-row"><label>Deal Type *</label><select name="dealType" required onchange="toggleOther(this,'dealTypeOther')">
-        <option>Single Tranche</option><option>Multiple Tranches</option><option>Other</option></select></div>
+        <option>Opco Deal</option><option>Promoter Financing</option><option>Acquisition Funding</option>
+        <option>Captable Consolidation</option><option>Others</option></select></div>
       <div class="form-row" id="dealTypeOtherRow" style="display:none"><label>Specify Deal Type *</label><input name="dealTypeOther" id="dealTypeOther" placeholder="Enter custom deal type"></div>
       <div class="form-row"><label>Deal Size (₹ Cr) *</label><input type="number" step="0.01" name="size" required></div>
-      <div class="form-row"><label>Tenor (years)</label><input type="number" step="0.01" name="tenor" placeholder="e.g. 3"></div>
-      
+
       <div class="form-row"><label>Primary Person (case owner) *</label><input name="primaryPerson" required placeholder="Internal lead"></div>
       <div class="form-row"><label>Secondary Person</label><input name="secondaryPerson"></div>
-      <div class="form-row"><label>Referred By</label><input name="referredBy" placeholder="Arranger / referrer name"></div>
-      <div class="form-row"><label>Referrer Contact (phone / email)</label><input name="referredContact" placeholder="+91… or name@firm.com"></div>
-      <div class="form-row full"><label>Use of Funds</label><input name="useOfFunds" placeholder="e.g. Working capital, capex, refinancing"></div>
-      <div class="form-row"><label>Status *</label><select name="stage" required>
-        <option>Active</option><option>Passive</option><option>Rejected</option>
+      <div class="form-row"><label>Referred By</label><input name="referredBy" id="leadReferredBy" list="referrerNamesList" placeholder="Arranger / referrer name" onchange="autoFillReferrerContact()" onblur="autoFillReferrerContact()"></div>
+      <datalist id="referrerNamesList"></datalist>
+      <div class="form-row"><label>Referrer Contact (phone / email)</label><input name="referredContact" id="leadReferredContact" placeholder="+91… or name@firm.com"></div>
+      <div class="form-row"><label>Credit Rating</label><input name="creditRating" placeholder="e.g. AA-, BBB+, Unrated"></div>
+      <div class="form-row"><label>Rating Rationale (PDF/Doc)</label>
+        <input type="file" id="leadRatingRationaleFile" accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg" style="font-size:12px">
+        <div id="leadRatingRationaleHint" style="font-size:11px;color:var(--text-dim);margin-top:4px"></div>
+      </div>
+      <div class="form-row"><label>Status *</label><select name="stage" required onchange="toggleLostFields(this.value)">
+        <option>Active</option><option>Passive</option>
+        <option>Rejected – Stage 1</option><option>Rejected – Stage 2</option><option>Rejected – Stage 3</option>
         <option>Lost</option><option>Closed</option></select></div>
-      <div class="form-row"><label>Potential Structure</label><input name="structure" placeholder="e.g. NCD, Term Loan"></div>
-      <div class="form-row full"><label>Remarks <span style="font-weight:400;color:var(--muted);font-size:11px">(why rejected / passive, key context for investor calls)</span></label><textarea name="remarks" placeholder="e.g. Rejected due to weak collateral coverage; revisit Q3"></textarea></div>
-      <div class="form-row full"><label>Internal Notes</label><textarea name="notes"></textarea></div>
+      <div class="form-row" id="lostToRow" style="display:none"><label>Lost To (Competitor)</label><input name="lostTo" placeholder="e.g. ABC AIF / XYZ NBFC"></div>
+      <div class="form-row full" id="lostTermsRow" style="display:none"><label>Key Terms of Winning Bid</label><input name="lostTerms" placeholder="e.g. 13.5% / 36m / Senior Secured / 1.5x cover"></div>
+      <div class="form-row full"><label>Remarks <span style="font-weight:400;color:var(--muted);font-size:11px">(why rejected / passive, key context for investor calls)</span></label><textarea name="remarks" placeholder="e.g. Rejected at IC due to weak collateral coverage; revisit Q3"></textarea></div>
+      <div class="form-row full">
+        <label>Internal Notes <span style="font-weight:400;color:var(--muted);font-size:11px">(timestamped log — each save appends a new entry)</span></label>
+        <textarea name="notes" id="leadNotesInput" placeholder="Add a new note — will be timestamped on save"></textarea>
+        <div id="leadNotesHistory" style="margin-top:8px;max-height:180px;overflow-y:auto;font-size:12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:6px;padding:8px;display:none"></div>
+      </div>
     </div>
     <input type="hidden" name="id">
     <div class="modal-actions">
