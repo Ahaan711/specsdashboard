@@ -313,7 +313,7 @@
     <select id="leadFilterStage" onchange="renderLeads()">
       <option value="">Status</option>
       <option>Active</option><option>Passive</option><option>Rejected</option>
-      <option>Lost</option><option>Completed</option>
+      <option>Lost</option><option>Closed</option>
     </select>
     <select id="leadFilterSector" onchange="renderLeads()">
       <option value="">All Sectors</option>
@@ -573,7 +573,7 @@
       <div class="form-row full"><label>Use of Funds</label><input name="useOfFunds" placeholder="e.g. Working capital, capex, refinancing"></div>
       <div class="form-row"><label>Status *</label><select name="stage" required>
         <option>Active</option><option>Passive</option><option>Rejected</option>
-        <option>Lost</option><option>Completed</option></select></div>
+        <option>Lost</option><option>Closed</option></select></div>
       <div class="form-row"><label>Potential Structure</label><input name="structure" placeholder="e.g. NCD, Term Loan"></div>
       <div class="form-row full"><label>Remarks <span style="font-weight:400;color:var(--muted);font-size:11px">(why rejected / passive, key context for investor calls)</span></label><textarea name="remarks" placeholder="e.g. Rejected due to weak collateral coverage; revisit Q3"></textarea></div>
       <div class="form-row full"><label>Internal Notes</label><textarea name="notes"></textarea></div>
@@ -982,12 +982,12 @@ function renderLeads(){
         <td title="${esc(remarksTxt)}" style="max-width:240px;cursor:pointer" onclick="editRemarks('${l.id}')">${remarksShort}</td>
         <td class="actions">
           <button class="btn btn-ghost btn-sm" onclick="editLead('${esc(l.id)}')">Edit</button>
-         ${l.stage==='Completed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${esc(l.id)}')">→ Deal</button>`:''}
+         ${l.stage==='Closed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${esc(l.id)}')">→ Deal</button>`:''}
          <button class="btn btn-danger btn-sm" onclick="delLead('${esc(l.id)}')">×</button>
         </td>
       </tr>`}).join('');
   } else {
-    const stages = ['Active','Passive','Rejected','Lost','Completed'];
+    const stages = ['Active','Passive','Rejected','Lost','Closed'];
     document.getElementById('kanban').innerHTML = stages.map(s=>{
       const items = ls.filter(l=>l.stage===s);
       return `<div class="kcol"><h4>${s} <span>${items.length}</span></h4>
@@ -999,7 +999,7 @@ function renderLeads(){
     }).join('');
   }
   // summary
-  const stages = ['Active','Passive','Rejected','Lost','Completed'];
+  const stages = ['Active','Passive','Rejected','Lost','Closed'];
   const total = ls.reduce((a,b)=>a+(+b.size||0),0);
   document.getElementById('pipelineSummary').innerHTML =
     stages.map(s=>`<div><span class="${stageClass(s)}">${s}</span> <b>${ls.filter(l=>l.stage===s).length}</b></div>`).join('') +
@@ -1113,7 +1113,7 @@ function editRemarks(id){
 }
 function quickChangeStage(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
-  const stages = ['Active','Passive','Rejected','Lost','Completed'];
+  const stages = ['Active','Passive','Rejected','Lost','Closed'];
   const ns = window.prompt(`Change status for ${l.company}.\nOptions: ${stages.join(', ')}\nCurrent: ${l.stage}`, l.stage);
   if(!ns || !stages.includes(ns)) return;
   if(ns === l.stage) return;
