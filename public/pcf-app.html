@@ -1798,14 +1798,20 @@ function downloadCSV(rows, name){
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
 }
 function exportLeadsCSV(){
-  const cols=['company','sector','dealType','size','tenor','primaryPerson','secondaryPerson','referredBy','referredContact','useOfFunds','stage','structure','notes'];
-  downloadCSV([cols, ...state.leads.map(l=>cols.map(c=>l[c]||''))],'leads.csv');
+  const cols=['company','sector','dealType','size','primaryPerson','secondaryPerson','referredBy','referredContact','creditRating','stage','lostTo','lostTerms','remarks','notes'];
+  downloadCSV([cols, ...state.leads.map(l=>cols.map(c=>{
+    if(c==='notes') return (l.notesLog||[]).map(n=>`[${n.ts}] ${n.text}`).join(' | ') || (l.notes||'');
+    return l[c]||'';
+  }))],'leads.csv');
 }
 function exportXLSX(){
   const wb = XLSX.utils.book_new();
   // leads
-  const leadCols=['id','company','sector','dealType','size','tenor','primaryPerson','secondaryPerson','referredBy','referredContact','useOfFunds','stage','structure','notes'];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.leads.map(l=>{const o={};leadCols.forEach(c=>o[c]=l[c]||'');return o})), 'Leads');
+  const leadCols=['id','company','sector','dealType','size','primaryPerson','secondaryPerson','referredBy','referredContact','creditRating','stage','lostTo','lostTerms','remarks','notes'];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.leads.map(l=>{const o={};leadCols.forEach(c=>{
+    if(c==='notes') o[c] = (l.notesLog||[]).map(n=>`[${n.ts}] ${n.text}`).join(' | ') || (l.notes||'');
+    else o[c]=l[c]||'';
+  });return o})), 'Leads');
   // deals
   const dealCols=['id','company','sector','dealType','size','invested','coupon','tenor','startDate','repayType','amortFreq','moratorium','upfrontFee','status','rating','security','xirrOverride','covenants'];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.deals.map(d=>{const o={};dealCols.forEach(c=>o[c]=d[c]||'');return o})), 'Deals');
