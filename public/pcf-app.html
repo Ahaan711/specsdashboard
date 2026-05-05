@@ -604,6 +604,15 @@
   </form>
 </div></div>
 
+<div id="leadDetailModal" class="modal-bg"><div class="modal" style="max-width:960px">
+  <h2><span id="leadDetailTitle">Lead Details</span><span class="x" onclick="closeModal('leadDetailModal')">×</span></h2>
+  <div id="leadDetailBody"></div>
+  <div class="modal-actions">
+    <button type="button" class="btn btn-ghost" onclick="closeModal('leadDetailModal')">Close</button>
+    <button type="button" class="btn btn-primary" id="leadDetailEditBtn">Edit Lead</button>
+  </div>
+</div></div>
+
 <div id="dealModal" class="modal-bg"><div class="modal" style="max-width:880px">
   <h2><span>Add Deal</span><span class="x" onclick="closeModal('dealModal')">×</span></h2>
   <form id="dealForm" onsubmit="saveDeal(event)">
