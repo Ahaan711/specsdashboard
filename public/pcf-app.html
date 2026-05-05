@@ -989,7 +989,7 @@ function renderLeads(){
       return `
       <tr>
         <td>${i+1}</td>
-        <td><b>${esc(l.company)}</b></td>
+        <td><a href="#" onclick="event.preventDefault();openLeadDetail('${esc(l.id)}')" style="color:var(--accent,#4ea1ff);text-decoration:none;font-weight:600">${esc(l.company)}</a></td>
         <td>${esc(l.sector)}</td>
         <td>${esc(l.dealType)}</td>
         <td>${esc(l.primaryPerson||'—')}${l.secondaryPerson?`<div style="font-size:11px;color:var(--text-dim)">2°: ${esc(l.secondaryPerson)}</div>`:''}</td>
@@ -1009,7 +1009,7 @@ function renderLeads(){
     document.getElementById('kanban').innerHTML = stages.map(s=>{
       const items = ls.filter(l=>l.stage===s);
       return `<div class="kcol"><h4>${s} <span>${items.length}</span></h4>
-        ${items.map(l=>`<div class="kcard" onclick="editLead('${esc(l.id)}')">
+        ${items.map(l=>`<div class="kcard" onclick="openLeadDetail('${esc(l.id)}')" style="cursor:pointer">
           <div class="name">${esc(l.company)}</div>
           <div class="meta"><span>₹${fmt(l.size)} Cr</span>${l.creditRating?`<span>${esc(l.creditRating)}</span>`:''}${l.stage==='Lost'&&l.lostTo?`<span style="color:var(--red-neg)">→ ${esc(l.lostTo)}</span>`:''}</div>
         </div>`).join('')}
