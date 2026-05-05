@@ -1311,6 +1311,7 @@ function _renderLeadDetailBody(l){
   const fld = (lab,val)=>`<div><div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em">${lab}</div><div style="font-weight:600;margin-top:2px">${val||'<span style=\"color:var(--text-dim);font-weight:400\">—</span>'}</div></div>`;
   const cachedSummary = _rationaleSummaryCache[l.id];
   return `
+  ${renderLifecycleStepper(l)}
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px 18px;margin-bottom:18px">
     ${fld('Sector', esc(l.sector))}
     ${fld('Deal Type', esc(l.dealType))}
