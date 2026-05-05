@@ -604,6 +604,15 @@
   </form>
 </div></div>
 
+<div id="leadDetailModal" class="modal-bg"><div class="modal" style="max-width:960px">
+  <h2><span id="leadDetailTitle">Lead Details</span><span class="x" onclick="closeModal('leadDetailModal')">×</span></h2>
+  <div id="leadDetailBody"></div>
+  <div class="modal-actions">
+    <button type="button" class="btn btn-ghost" onclick="closeModal('leadDetailModal')">Close</button>
+    <button type="button" class="btn btn-primary" id="leadDetailEditBtn">Edit Lead</button>
+  </div>
+</div></div>
+
 <div id="dealModal" class="modal-bg"><div class="modal" style="max-width:880px">
   <h2><span>Add Deal</span><span class="x" onclick="closeModal('dealModal')">×</span></h2>
   <form id="dealForm" onsubmit="saveDeal(event)">
@@ -989,7 +998,7 @@ function renderLeads(){
       return `
       <tr>
         <td>${i+1}</td>
-        <td><b>${esc(l.company)}</b></td>
+        <td><a href="#" onclick="event.preventDefault();openLeadDetail('${esc(l.id)}')" style="color:var(--accent,#4ea1ff);text-decoration:none;font-weight:600">${esc(l.company)}</a></td>
         <td>${esc(l.sector)}</td>
         <td>${esc(l.dealType)}</td>
         <td>${esc(l.primaryPerson||'—')}${l.secondaryPerson?`<div style="font-size:11px;color:var(--text-dim)">2°: ${esc(l.secondaryPerson)}</div>`:''}</td>
@@ -1009,7 +1018,7 @@ function renderLeads(){
     document.getElementById('kanban').innerHTML = stages.map(s=>{
       const items = ls.filter(l=>l.stage===s);
       return `<div class="kcol"><h4>${s} <span>${items.length}</span></h4>
-        ${items.map(l=>`<div class="kcard" onclick="editLead('${esc(l.id)}')">
+        ${items.map(l=>`<div class="kcard" onclick="openLeadDetail('${esc(l.id)}')" style="cursor:pointer">
           <div class="name">${esc(l.company)}</div>
           <div class="meta"><span>₹${fmt(l.size)} Cr</span>${l.creditRating?`<span>${esc(l.creditRating)}</span>`:''}${l.stage==='Lost'&&l.lostTo?`<span style="color:var(--red-neg)">→ ${esc(l.lostTo)}</span>`:''}</div>
         </div>`).join('')}
@@ -1155,6 +1164,106 @@ function renderNotesHistory(notesLog){
     const ts = isNaN(d) ? n.ts : d.toLocaleString();
     return `<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="color:var(--text-dim);font-size:11px">${esc(ts)}</div><div style="white-space:pre-wrap">${esc(n.text)}</div></div>`;
   }).join('');
+}
+
+const _rationaleSummaryCache = {};
+function _renderLeadDetailBody(l){
+  const docs = (state.documents||[]).filter(d => d.linkedLeadId===l.id || (d.linkedCompany||'').toLowerCase() === (l.company||'').toLowerCase());
+  const ratDoc = l.ratingRationaleDocId ? (state.documents||[]).find(d=>d.id===l.ratingRationaleDocId) : null;
+  const isRej = (l.stage||'').startsWith('Rejected');
+  const isLost = l.stage==='Lost';
+  const notesLog = l.notesLog || (l.notes ? [{ts:new Date(0).toISOString(), text:l.notes}] : []);
+  const fld = (lab,val)=>`<div><div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em">${lab}</div><div style="font-weight:600;margin-top:2px">${val||'<span style=\"color:var(--text-dim);font-weight:400\">—</span>'}</div></div>`;
+  const cachedSummary = _rationaleSummaryCache[l.id];
+  return `
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px 18px;margin-bottom:18px">
+    ${fld('Sector', esc(l.sector))}
+    ${fld('Deal Type', esc(l.dealType))}
+    ${fld('Deal Size', l.size?`₹${fmt(l.size)} Cr`:'')}
+    ${fld('Status', `<span class="${stageClass(l.stage)}">${esc(l.stage)}</span>`)}
+    ${fld('Credit Rating', esc(l.creditRating))}
+    ${fld('Primary Person', esc(l.primaryPerson))}
+    ${l.secondaryPerson?fld('Secondary', esc(l.secondaryPerson)):''}
+    ${l.referredBy?fld('Referred By', esc(l.referredBy)+(l.referredContact?` <span style="font-weight:400;color:var(--text-dim);font-size:12px">(${esc(l.referredContact)})</span>`:'')):''}
+  </div>
+
+  ${(isRej || isLost) ? `
+  <div style="background:rgba(255,80,80,.08);border:1px solid rgba(255,80,80,.25);border-radius:8px;padding:12px;margin-bottom:16px">
+    <div style="font-weight:700;color:var(--red-neg,#ff6b6b);margin-bottom:6px">${isLost?'❌ Lost':'⛔ '+esc(l.stage)} — Why?</div>
+    <div style="white-space:pre-wrap;font-size:13px">${esc(l.remarks||'No reason captured. Click Edit to add one.')}</div>
+    ${isLost ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,80,80,.2);display:grid;grid-template-columns:1fr 2fr;gap:10px;font-size:13px">
+        <div><div style="font-size:11px;color:var(--text-dim)">LOST TO</div><b>${esc(l.lostTo||'—')}</b></div>
+        <div><div style="font-size:11px;color:var(--text-dim)">KEY TERMS</div>${esc(l.lostTerms||'—')}</div>
+      </div>` : ''}
+  </div>` : (l.remarks ? `
+  <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px">
+    <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px">Remarks</div>
+    <div style="white-space:pre-wrap;font-size:13px">${esc(l.remarks)}</div>
+  </div>` : '')}
+
+  <div style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="font-weight:700">📊 Rating Rationale Summary</div>
+      ${ratDoc ? `<button class="btn btn-ghost btn-sm" onclick="summarizeRationaleNow('${esc(l.id)}')">${cachedSummary?'Re-summarize':'Generate summary'}</button>` : ''}
+    </div>
+    ${ratDoc ? `<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Source: <a href="#" onclick="event.preventDefault();downloadDocument('${esc(ratDoc.id)}')" style="color:var(--accent,#4ea1ff)">${esc(ratDoc.name)}</a></div>` : '<div style="font-size:12px;color:var(--text-dim)">No rating rationale uploaded. Upload via Edit Lead.</div>'}
+    <div id="leadDetailRatSummary" style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;line-height:1.55">${cachedSummary ? esc(cachedSummary).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>') : (ratDoc ? '<span style="color:var(--text-dim)">Click "Generate summary" to extract key strengths, weaknesses and rating sensitivities from the rationale.</span>' : '')}</div>
+  </div>
+
+  <div style="margin-bottom:16px">
+    <div style="font-weight:700;margin-bottom:8px">📁 Company Documents <span style="font-weight:400;color:var(--text-dim);font-size:12px">(${docs.length})</span></div>
+    ${docs.length ? `<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      ${docs.map(d=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px">
+        <div style="flex:1"><b>${esc(d.name)}</b> <span style="color:var(--text-dim);font-size:11px">· ${kindLabel(d.kind)} · ${fmtBytes(d.size)}</span></div>
+        <button class="btn btn-ghost btn-sm" onclick="downloadDocument('${esc(d.id)}')">⇩</button>
+      </div>`).join('')}
+    </div>` : '<div style="font-size:12px;color:var(--text-dim)">No documents linked to this company yet.</div>'}
+  </div>
+
+  <div>
+    <div style="font-weight:700;margin-bottom:8px">📝 Internal Notes <span style="font-weight:400;color:var(--text-dim);font-size:12px">(${notesLog.length} entries)</span></div>
+    ${notesLog.length ? `<div style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
+      ${notesLog.slice().reverse().map(n=>{
+        const d = new Date(n.ts); const ts = isNaN(d) ? n.ts : d.toLocaleString();
+        return `<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="color:var(--text-dim);font-size:11px">${esc(ts)}</div><div style="white-space:pre-wrap;font-size:13px">${esc(n.text)}</div></div>`;
+      }).join('')}
+    </div>` : '<div style="font-size:12px;color:var(--text-dim)">No notes yet.</div>'}
+  </div>`;
+}
+function openLeadDetail(id){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  document.getElementById('leadDetailTitle').textContent = l.company || 'Lead Details';
+  document.getElementById('leadDetailBody').innerHTML = _renderLeadDetailBody(l);
+  document.getElementById('leadDetailEditBtn').onclick = ()=>{ closeModal('leadDetailModal'); editLead(id); };
+  document.getElementById('leadDetailModal').classList.add('open');
+}
+async function summarizeRationaleNow(id){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  const doc = l.ratingRationaleDocId ? (state.documents||[]).find(d=>d.id===l.ratingRationaleDocId) : null;
+  if(!doc){ toast('No rationale document attached'); return; }
+  const out = document.getElementById('leadDetailRatSummary');
+  if(out) out.innerHTML = '<span style="color:var(--text-dim)">⏳ Reading document and summarizing…</span>';
+  try{
+    const res = await fetch(doc.dataUrl);
+    const blob = await res.blob();
+    const file = new File([blob], doc.name, { type: doc.type || blob.type });
+    const text = await _extractTextFromFile(file);
+    if(!text || text.trim().length<20){ if(out) out.textContent='⚠️ Could not read text from document.'; return; }
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/summarize-rationale`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ text, fileName: doc.name, company: l.company }),
+    });
+    if(!r.ok){ const e = await r.json().catch(()=>({})); if(out) out.textContent = '⚠️ '+(e.error||'Summary failed'); return; }
+    const data = await r.json();
+    const summary = (data.summary||'').trim();
+    if(!summary){ if(out) out.textContent = '⚠️ Empty summary returned.'; return; }
+    _rationaleSummaryCache[id] = summary;
+    if(out) out.innerHTML = esc(summary).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
+    const btn = document.querySelector(`#leadDetailBody button[onclick*="summarizeRationaleNow"]`);
+    if(btn) btn.textContent='Re-summarize';
+    toast('Rationale summarized');
+  }catch(err){ console.error(err); if(out) out.textContent='⚠️ Error: '+err.message; }
 }
 
 function openLeadModal(){

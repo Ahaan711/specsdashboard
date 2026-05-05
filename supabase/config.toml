@@ -2,3 +2,6 @@ project_id = "ablomcksgyilrffmvojp"
 
 [functions.extract-credit-rating]
 verify_jwt = false
+
+[functions.summarize-rationale]
+verify_jwt = false
