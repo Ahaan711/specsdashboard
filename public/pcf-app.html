@@ -148,6 +148,29 @@
   .kcard .name{font-weight:600;font-size:13px;margin-bottom:4px}
   .kcard .meta{font-size:11px;color:var(--text-dim);display:flex;justify-content:space-between}
 
+  /* ---------- LIFECYCLE STEPPER ---------- */
+  .lc-wrap{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px}
+  .lc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;flex-wrap:wrap}
+  .lc-head .lc-title{font-weight:700;font-size:13px}
+  .lc-head .lc-sub{font-size:11px;color:var(--text-dim)}
+  .lc-steps{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding-bottom:4px}
+  .lc-step{flex:1;min-width:90px;display:flex;flex-direction:column;align-items:center;position:relative;padding:0 4px}
+  .lc-step:not(:last-child)::after{content:"";position:absolute;top:13px;left:50%;width:100%;height:2px;background:var(--border);z-index:0}
+  .lc-step.done:not(:last-child)::after{background:var(--green-pos,#4ade80)}
+  .lc-step.current:not(:last-child)::after{background:linear-gradient(90deg,var(--orange) 0%,var(--border) 100%)}
+  .lc-dot{width:26px;height:26px;border-radius:50%;background:var(--card-2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text-dim);position:relative;z-index:1}
+  .lc-step.done .lc-dot{background:var(--green-pos,#4ade80);border-color:var(--green-pos,#4ade80);color:#0b1422}
+  .lc-step.current .lc-dot{background:var(--orange);border-color:var(--orange);color:#fff;box-shadow:0 0 0 4px rgba(255,117,83,.18)}
+  .lc-step.blocked .lc-dot{background:var(--red-neg);border-color:var(--red-neg);color:#fff}
+  .lc-label{font-size:10.5px;text-align:center;margin-top:6px;color:var(--text-dim);line-height:1.3;max-width:110px}
+  .lc-step.done .lc-label,.lc-step.current .lc-label{color:var(--text)}
+  .lc-step.current .lc-label{font-weight:700}
+  .lc-meta{font-size:10px;color:var(--text-dim);margin-top:2px;text-align:center}
+  .lc-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .lc-history{margin-top:10px;font-size:11.5px;color:var(--text-dim);max-height:120px;overflow-y:auto;border-top:1px dashed var(--border);padding-top:8px}
+  .lc-history .row{display:flex;gap:8px;padding:3px 0}
+  .lc-history .row b{color:var(--text)}
+
   /* ---------- MODAL ---------- */
   .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto}
   .modal-bg.open{display:flex}
@@ -1166,6 +1189,118 @@ function renderNotesHistory(notesLog){
   }).join('');
 }
 
+// ============= DEAL LIFECYCLE =============
+const LIFECYCLE_STAGES = [
+  { key:'Sourced',         label:'Sourced',          desc:'Lead identified' },
+  { key:'Initial Review',  label:'Initial Review',   desc:'Screening & first call' },
+  { key:'Term Sheet',      label:'Term Sheet',       desc:'Indicative terms shared' },
+  { key:'Due Diligence',   label:'Due Diligence',    desc:'Financial & legal DD' },
+  { key:'Credit Approval', label:'Credit Approval',  desc:'IC / credit committee' },
+  { key:'Documentation',   label:'Documentation',    desc:'Definitive docs & CPs' },
+  { key:'Disbursed',       label:'Disbursed',        desc:'Funds released' },
+];
+function _lifecycleIndexFor(l){
+  // explicit lifecycle takes priority
+  if(l.lifecycleStage){
+    const i = LIFECYCLE_STAGES.findIndex(s=>s.key===l.lifecycleStage);
+    if(i>=0) return i;
+  }
+  // map pipeline status → lifecycle index when not explicitly set
+  const s = l.stage||'';
+  if(s==='Closed') return LIFECYCLE_STAGES.length-1; // Disbursed
+  if(s==='Active') return 1; // Initial Review
+  if(s==='Passive') return 0; // Sourced
+  return 0;
+}
+function _ensureLifecycleHistory(l){
+  if(!Array.isArray(l.lifecycleHistory)) l.lifecycleHistory = [];
+  if(!l.lifecycleHistory.length){
+    const idx = _lifecycleIndexFor(l);
+    l.lifecycleHistory.push({ stage: LIFECYCLE_STAGES[idx].key, ts: l.createdAt || new Date().toISOString(), note:'Initial' });
+    l.lifecycleStage = LIFECYCLE_STAGES[idx].key;
+  }
+  return l.lifecycleHistory;
+}
+function renderLifecycleStepper(l){
+  const isBlocked = l.stage==='Lost' || (l.stage||'').startsWith('Rejected');
+  const curIdx = _lifecycleIndexFor(l);
+  const hist = _ensureLifecycleHistory(l);
+  const lastTs = hist.length ? new Date(hist[hist.length-1].ts) : null;
+  const lastTsStr = lastTs && !isNaN(lastTs) ? lastTs.toLocaleDateString() : '—';
+  const daysInStage = lastTs ? Math.max(0, Math.floor((Date.now()-lastTs.getTime())/86400000)) : 0;
+
+  const steps = LIFECYCLE_STAGES.map((s,i)=>{
+    let cls = '';
+    if(isBlocked && i===curIdx) cls='blocked';
+    else if(i<curIdx) cls='done';
+    else if(i===curIdx) cls='current';
+    const stageEntry = hist.slice().reverse().find(h=>h.stage===s.key);
+    const stageTs = stageEntry ? new Date(stageEntry.ts) : null;
+    const stageTsStr = stageTs && !isNaN(stageTs) ? stageTs.toLocaleDateString(undefined,{month:'short',day:'numeric'}) : '';
+    return `<div class="lc-step ${cls}" title="${esc(s.desc)}">
+      <div class="lc-dot">${cls==='done'?'✓':(cls==='blocked'?'!':(i+1))}</div>
+      <div class="lc-label">${esc(s.label)}</div>
+      <div class="lc-meta">${stageTsStr||'&nbsp;'}</div>
+    </div>`;
+  }).join('');
+
+  const canAdvance = !isBlocked && curIdx < LIFECYCLE_STAGES.length-1;
+  const canRevert = curIdx > 0;
+  const nextLabel = canAdvance ? LIFECYCLE_STAGES[curIdx+1].label : '';
+
+  return `<div class="lc-wrap">
+    <div class="lc-head">
+      <div>
+        <div class="lc-title">🔁 Deal Lifecycle</div>
+        <div class="lc-sub">Currently at <b style="color:${isBlocked?'var(--red-neg)':'var(--orange)'}">${esc(LIFECYCLE_STAGES[curIdx].label)}</b> · ${daysInStage} day${daysInStage===1?'':'s'} in stage · since ${esc(lastTsStr)}${isBlocked?` · <span style="color:var(--red-neg)">${esc(l.stage)}</span>`:''}</div>
+      </div>
+      <div class="lc-actions">
+        ${canRevert?`<button class="btn btn-ghost btn-sm" onclick="advanceLifecycle('${esc(l.id)}',-1)">← Back</button>`:''}
+        ${canAdvance?`<button class="btn btn-primary btn-sm" onclick="advanceLifecycle('${esc(l.id)}',1)">Advance to ${esc(nextLabel)} →</button>`:''}
+        <button class="btn btn-ghost btn-sm" onclick="setLifecycleStage('${esc(l.id)}')">Set stage…</button>
+      </div>
+    </div>
+    <div class="lc-steps">${steps}</div>
+    ${hist.length ? `<div class="lc-history">
+      <div style="font-weight:600;color:var(--text);margin-bottom:4px">Stage history</div>
+      ${hist.slice().reverse().map(h=>{
+        const d = new Date(h.ts); const ts = isNaN(d)?h.ts:d.toLocaleString();
+        return `<div class="row"><span style="min-width:140px"><b>${esc(h.stage)}</b></span><span style="color:var(--text-dim);min-width:160px">${esc(ts)}</span><span>${esc(h.note||'')}</span></div>`;
+      }).join('')}
+    </div>` : ''}
+  </div>`;
+}
+function advanceLifecycle(id, dir){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  _ensureLifecycleHistory(l);
+  const cur = _lifecycleIndexFor(l);
+  const next = cur + dir;
+  if(next<0 || next>=LIFECYCLE_STAGES.length) return;
+  const newKey = LIFECYCLE_STAGES[next].key;
+  const note = window.prompt(`Move to "${newKey}". Add a short note (optional):`, '');
+  if(note===null) return;
+  l.lifecycleStage = newKey;
+  l.lifecycleHistory.push({ stage:newKey, ts:new Date().toISOString(), note:(note||'').trim() });
+  if(newKey==='Disbursed') l.stage = 'Closed';
+  save(); document.getElementById('leadDetailBody').innerHTML = _renderLeadDetailBody(l); renderLeads(); toast('Lifecycle updated');
+}
+function setLifecycleStage(id){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  const opts = LIFECYCLE_STAGES.map((s,i)=>`${i+1}. ${s.key}`).join('\n');
+  const cur = _lifecycleIndexFor(l);
+  const ans = window.prompt(`Set lifecycle stage:\n${opts}\n\nEnter number (current: ${cur+1}):`, String(cur+1));
+  if(!ans) return;
+  const n = parseInt(ans,10); if(isNaN(n) || n<1 || n>LIFECYCLE_STAGES.length) return;
+  const newKey = LIFECYCLE_STAGES[n-1].key;
+  if(newKey===l.lifecycleStage) return;
+  const note = window.prompt('Note for this change (optional):','') || '';
+  _ensureLifecycleHistory(l);
+  l.lifecycleStage = newKey;
+  l.lifecycleHistory.push({ stage:newKey, ts:new Date().toISOString(), note:note.trim() });
+  if(newKey==='Disbursed') l.stage='Closed';
+  save(); document.getElementById('leadDetailBody').innerHTML = _renderLeadDetailBody(l); renderLeads(); toast('Lifecycle stage set');
+}
+
 const _rationaleSummaryCache = {};
 function _renderLeadDetailBody(l){
   const docs = (state.documents||[]).filter(d => d.linkedLeadId===l.id || (d.linkedCompany||'').toLowerCase() === (l.company||'').toLowerCase());
@@ -1176,6 +1311,7 @@ function _renderLeadDetailBody(l){
   const fld = (lab,val)=>`<div><div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em">${lab}</div><div style="font-weight:600;margin-top:2px">${val||'<span style=\"color:var(--text-dim);font-weight:400\">—</span>'}</div></div>`;
   const cachedSummary = _rationaleSummaryCache[l.id];
   return `
+  ${renderLifecycleStepper(l)}
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px 18px;margin-bottom:18px">
     ${fld('Sector', esc(l.sector))}
     ${fld('Deal Type', esc(l.dealType))}
