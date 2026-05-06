@@ -1446,6 +1446,14 @@ function editLead(id){
       ratHint.innerHTML = d ? `📎 Current: <b>${esc(d.name)}</b> — upload to replace` : 'Previously uploaded file no longer available — upload to replace';
     } else ratHint.textContent='No file uploaded yet';
   }
+  const preHint = document.getElementById('leadPreDDHint');
+  const preFile = document.getElementById('leadPreDDFile'); if(preFile) preFile.value='';
+  if(preHint){
+    if(l.preDDDocId){
+      const d = (state.documents||[]).find(x=>x.id===l.preDDDocId);
+      preHint.innerHTML = d ? `📎 Current: <b>${esc(d.name)}</b> — upload to replace` : 'Previously uploaded file no longer available — upload to replace';
+    } else preHint.textContent='No Pre-DD note uploaded yet';
+  }
   if(sectorVal==='Other'){ document.getElementById('sectorOtherRow').style.display=''; document.getElementById('sectorOther').value = l.sector==='Other'?'':l.sector; }
   else document.getElementById('sectorOtherRow').style.display='none';
   if(dtVal==='Others'){ document.getElementById('dealTypeOtherRow').style.display=''; document.getElementById('dealTypeOther').value = l.dealType==='Others'?'':l.dealType; }
