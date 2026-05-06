@@ -1414,6 +1414,8 @@ function openLeadModal(){
   renderNotesHistory([]);
   const ratHint = document.getElementById('leadRatingRationaleHint'); if(ratHint) ratHint.textContent='';
   const ratFile = document.getElementById('leadRatingRationaleFile'); if(ratFile) ratFile.value='';
+  const preHint = document.getElementById('leadPreDDHint'); if(preHint) preHint.textContent='';
+  const preFile = document.getElementById('leadPreDDFile'); if(preFile) preFile.value='';
   refreshReferrerDatalist();
   const sel = document.getElementById('leadSectorSelect');
   if(sel){ sel.dataset.userTouched=''; sel.addEventListener('change', ()=>{ sel.dataset.userTouched='1'; }, { once:true }); }
