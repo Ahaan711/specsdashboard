@@ -1309,6 +1309,7 @@ const _preDDSummaryCache = {};
 function _renderLeadDetailBody(l){
   const docs = (state.documents||[]).filter(d => d.linkedLeadId===l.id || (d.linkedCompany||'').toLowerCase() === (l.company||'').toLowerCase());
   const ratDoc = l.ratingRationaleDocId ? (state.documents||[]).find(d=>d.id===l.ratingRationaleDocId) : null;
+  const preDoc = l.preDDDocId ? (state.documents||[]).find(d=>d.id===l.preDDDocId) : null;
   const isRej = (l.stage||'').startsWith('Rejected');
   const isLost = l.stage==='Lost';
   const notesLog = l.notesLog || (l.notes ? [{ts:new Date(0).toISOString(), text:l.notes}] : []);
