@@ -1315,6 +1315,7 @@ function _renderLeadDetailBody(l){
   const notesLog = l.notesLog || (l.notes ? [{ts:new Date(0).toISOString(), text:l.notes}] : []);
   const fld = (lab,val)=>`<div><div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em">${lab}</div><div style="font-weight:600;margin-top:2px">${val||'<span style=\"color:var(--text-dim);font-weight:400\">—</span>'}</div></div>`;
   const cachedSummary = _rationaleSummaryCache[l.id];
+  const cachedPreSummary = _preDDSummaryCache[l.id];
   return `
   ${renderLifecycleStepper(l)}
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px 18px;margin-bottom:18px">
