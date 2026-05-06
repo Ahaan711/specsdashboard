@@ -1509,6 +1509,19 @@ async function saveLead(e){
   } else if(prev && prev.ratingRationaleDocId){
     obj.ratingRationaleDocId = prev.ratingRationaleDocId;
   }
+  // Handle Pre-DD note upload
+  const preFileEl = document.getElementById('leadPreDDFile');
+  const preFile = preFileEl && preFileEl.files && preFileEl.files[0];
+  if(preFile){
+    try{
+      await saveDocument(preFile, 'pre-dd-note', { linkedLeadId: obj.id, linkedCompany: obj.company||'', note:'Pre-DD Note' });
+      const justSaved = (state.documents||[]).find(d=>d.linkedLeadId===obj.id && d.kind==='pre-dd-note');
+      if(justSaved) obj.preDDDocId = justSaved.id;
+      delete _preDDSummaryCache[obj.id];
+    }catch(err){ console.error(err); toast('Could not attach Pre-DD note'); }
+  } else if(prev && prev.preDDDocId){
+    obj.preDDDocId = prev.preDDDocId;
+  }
   const idx = state.leads.findIndex(x=>x.id===obj.id);
   if(idx<0) state.leads.push(obj);
   else state.leads[idx] = {...state.leads[idx], ...obj};
