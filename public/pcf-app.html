@@ -616,6 +616,11 @@
         <textarea name="notes" id="leadNotesInput" placeholder="Add a new note — will be timestamped on save"></textarea>
         <div id="leadNotesHistory" style="margin-top:8px;max-height:180px;overflow-y:auto;font-size:12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:6px;padding:8px;display:none"></div>
       </div>
+      <div class="form-row full">
+        <label>Pre-DD Note (PDF/Doc) <span style="font-weight:400;color:var(--muted);font-size:11px">— uploaded note will be auto-summarized in the lead detail view</span></label>
+        <input type="file" id="leadPreDDFile" accept=".pdf,.docx,.doc,.txt" style="font-size:12px">
+        <div id="leadPreDDHint" style="font-size:11px;color:var(--text-dim);margin-top:4px"></div>
+      </div>
     </div>
     <input type="hidden" name="id">
     <div class="modal-actions">
