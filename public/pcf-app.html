@@ -1416,6 +1416,34 @@ async function summarizeRationaleNow(id){
     toast('Rationale summarized');
   }catch(err){ console.error(err); if(out) out.textContent='⚠️ Error: '+err.message; }
 }
+async function summarizePreDDNow(id){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  const doc = l.preDDDocId ? (state.documents||[]).find(d=>d.id===l.preDDDocId) : null;
+  if(!doc){ toast('No Pre-DD note attached'); return; }
+  const out = document.getElementById('leadDetailPreDDSummary');
+  if(out) out.innerHTML = '<span style="color:var(--text-dim)">⏳ Reading document and summarizing…</span>';
+  try{
+    const res = await fetch(doc.dataUrl);
+    const blob = await res.blob();
+    const file = new File([blob], doc.name, { type: doc.type || blob.type });
+    const text = await _extractTextFromFile(file);
+    if(!text || text.trim().length<20){ if(out) out.textContent='⚠️ Could not read text from document.'; return; }
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/summarize-rationale`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ text, fileName: doc.name, company: l.company, kind:'pre-dd' }),
+    });
+    if(!r.ok){ const e = await r.json().catch(()=>({})); if(out) out.textContent = '⚠️ '+(e.error||'Summary failed'); return; }
+    const data = await r.json();
+    const summary = (data.summary||'').trim();
+    if(!summary){ if(out) out.textContent = '⚠️ Empty summary returned.'; return; }
+    _preDDSummaryCache[id] = summary;
+    if(out) out.innerHTML = esc(summary).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
+    const btn = document.querySelector(`#leadDetailBody button[onclick*="summarizePreDDNow"]`);
+    if(btn) btn.textContent='Re-summarize';
+    toast('Pre-DD note summarized');
+  }catch(err){ console.error(err); if(out) out.textContent='⚠️ Error: '+err.message; }
+}
 
 function openLeadModal(){
   document.getElementById('leadForm').reset();
