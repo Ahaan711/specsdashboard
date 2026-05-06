@@ -1305,6 +1305,7 @@ function setLifecycleStage(id){
 }
 
 const _rationaleSummaryCache = {};
+const _preDDSummaryCache = {};
 function _renderLeadDetailBody(l){
   const docs = (state.documents||[]).filter(d => d.linkedLeadId===l.id || (d.linkedCompany||'').toLowerCase() === (l.company||'').toLowerCase());
   const ratDoc = l.ratingRationaleDocId ? (state.documents||[]).find(d=>d.id===l.ratingRationaleDocId) : null;
