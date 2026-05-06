@@ -2530,8 +2530,10 @@ function uploadDocument(ev){
   saveDocument(file, kind, {}).then(()=> toast('Saved to Documents'));
 }
 function kindLabel(k){
-  return k==='excel-import' ? 'Excel Import'
-       : k==='term-sheet'   ? 'Term Sheet'
+  return k==='excel-import'      ? 'Excel Import'
+       : k==='term-sheet'        ? 'Term Sheet'
+       : k==='rating-rationale'  ? 'Rating Rationale'
+       : k==='pre-dd-note'       ? 'Pre-DD Note'
        : 'Other';
 }
 function renderDocuments(){
