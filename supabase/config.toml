@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.summarize-rationale]
 verify_jwt = false
+
+[functions.fetch-market-news]
+verify_jwt = false
