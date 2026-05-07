@@ -475,6 +475,61 @@
   </div>
 </section>
 
+<!-- ============ REJECTED COMPANIES ============ -->
+<section id="rejected" class="section">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px">
+    <div>
+      <h1 class="page-title">Rejected Companies</h1>
+      <div class="page-sub">Track passed deals, monitor market activity, surface re-evaluation candidates</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="refreshAllMarketNews()" title="Pull fresh news for every rejected company">↻ Refresh All News</button>
+    </div>
+  </div>
+
+  <div id="reevalBanner"></div>
+
+  <div class="rej-subtabs" id="rejSubtabs">
+    <button data-rs="all" class="active" onclick="setRejSubtab('all')">All <span class="count" id="rsCntAll">0</span></button>
+    <button data-rs="Rejected – Stage 1" onclick="setRejSubtab('Rejected – Stage 1')">Stage 1 <span class="count" id="rsCnt1">0</span></button>
+    <button data-rs="Rejected – Stage 2" onclick="setRejSubtab('Rejected – Stage 2')">Stage 2 <span class="count" id="rsCnt2">0</span></button>
+    <button data-rs="Rejected – Stage 3" onclick="setRejSubtab('Rejected – Stage 3')">Stage 3 <span class="count" id="rsCnt3">0</span></button>
+    <button data-rs="reeval" onclick="setRejSubtab('reeval')">Re-evaluate Queue <span class="count" id="rsCntRe">0</span></button>
+  </div>
+
+  <div class="toolbar">
+    <input id="rejSearch" placeholder="Search company..." class="grow" oninput="renderRejected()">
+    <select id="rejFilterSector" onchange="renderRejected()">
+      <option value="">All Sectors</option>
+      <option>Real Estate</option><option>Infrastructure</option><option>Corporate</option>
+      <option>SME</option><option>Specialty Finance</option><option>NBFC / Lending</option>
+      <option>Fintech</option><option>Consumer</option><option>Agritech</option>
+      <option>Healthcare</option><option>Logistics</option><option>EdTech</option>
+      <option>Manufacturing</option><option>Technology / SaaS</option><option>Renewable Energy</option>
+      <option>Other</option>
+    </select>
+    <select id="rejFilterDateRange" onchange="renderRejected()">
+      <option value="">Any Date</option>
+      <option value="30">Last 30 days</option>
+      <option value="90">Last 90 days</option>
+      <option value="180">Last 6 months</option>
+      <option value="365">Last 12 months</option>
+    </select>
+    <select id="rejFilterReeval" onchange="renderRejected()">
+      <option value="">All</option>
+      <option value="yes">Re-evaluate flagged</option>
+      <option value="no">Not flagged</option>
+    </select>
+    <select id="rejSort" onchange="renderRejected()">
+      <option value="recent">Most Recently Rejected</option>
+      <option value="alpha">Alphabetical</option>
+      <option value="stage">By Stage</option>
+    </select>
+  </div>
+
+  <div id="rejGrid" class="rej-grid"></div>
+</section>
+
 <!-- ============ MODELER ============ -->
 <section id="modeler" class="section">
   <h1 class="page-title">Deal Modeler & XIRR Calculator</h1>
