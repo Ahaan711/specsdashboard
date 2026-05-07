@@ -798,6 +798,44 @@
   </div>
 </div></div>
 
+<div id="rejectModal" class="modal-bg"><div class="modal" style="max-width:560px">
+  <h2><span>Move to Rejected</span><span class="x" onclick="closeModal('rejectModal')">×</span></h2>
+  <form id="rejectForm" onsubmit="confirmReject(event)">
+    <div class="form-grid">
+      <div class="form-row full"><label>Company</label><input id="rjCompany" disabled></div>
+      <div class="form-row"><label>Rejection Stage *</label>
+        <select id="rjStage" required>
+          <option value="Rejected – Stage 1">Stage 1 — Initial screen</option>
+          <option value="Rejected – Stage 2">Stage 2 — After review / IC pre-read</option>
+          <option value="Rejected – Stage 3">Stage 3 — After DD / IC</option>
+        </select></div>
+      <div class="form-row"><label>Rejected By (Analyst) *</label><input id="rjAnalyst" required placeholder="Your name"></div>
+      <div class="form-row full"><label>Rejection Reason *</label>
+        <select id="rjReasonPick" onchange="onRejReasonPick(this.value)">
+          <option value="">— Pick a common reason or type custom below —</option>
+          <option>Weak management</option>
+          <option>Leverage too high</option>
+          <option>Covenant issues</option>
+          <option>Sector concern</option>
+          <option>Insufficient data</option>
+          <option>Pricing mismatch</option>
+          <option>Security / collateral inadequate</option>
+          <option>Promoter / governance concern</option>
+          <option>Cash flow concerns</option>
+          <option>Regulatory risk</option>
+          <option value="__custom">+ Other (custom)</option>
+        </select>
+        <textarea id="rjReason" required placeholder="Detailed rejection reason..." style="margin-top:8px;min-height:80px"></textarea>
+      </div>
+    </div>
+    <input type="hidden" id="rjLeadId">
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal('rejectModal')">Cancel</button>
+      <button type="submit" class="btn btn-danger">Confirm Rejection</button>
+    </div>
+  </form>
+</div></div>
+
 <div id="toast" class="toast"></div>
 
 <script>
