@@ -228,6 +228,32 @@
     padding:12px 18px;border-radius:8px;z-index:200;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.4);
     transform:translateY(100px);opacity:0;transition:all .3s}
   .toast.show{transform:translateY(0);opacity:1}
+  /* ---------- REJECTED ---------- */
+  .rej-subtabs{display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .rej-subtabs button{padding:9px 18px;font-weight:600;color:var(--text-dim);border-bottom:2px solid transparent;font-size:13px}
+  .rej-subtabs button.active{color:var(--orange);border-bottom-color:var(--orange)}
+  .rej-subtabs button .count{background:var(--card-2);color:var(--text-dim);padding:1px 7px;border-radius:10px;font-size:10px;margin-left:6px}
+  .rej-subtabs button.active .count{background:var(--orange);color:#fff}
+  .rej-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px}
+  .rej-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px}
+  .rej-card.flagged{border-color:var(--amber);box-shadow:0 0 0 1px rgba(251,191,36,.25)}
+  .rej-card .rc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .rej-card .rc-name{font-weight:700;font-size:14px;cursor:pointer}
+  .rej-card .rc-name:hover{color:var(--orange)}
+  .rej-card .rc-meta{font-size:11px;color:var(--text-dim);display:flex;gap:8px;flex-wrap:wrap}
+  .rej-stage-1{background:rgba(251,191,36,.18);color:var(--amber)}
+  .rej-stage-2{background:rgba(255,117,83,.2);color:var(--orange)}
+  .rej-stage-3{background:rgba(248,113,113,.2);color:var(--red-neg)}
+  .rej-reason{font-size:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text)}
+  .rej-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
+  .rej-collapse{border-top:1px dashed var(--border);padding-top:8px;margin-top:4px}
+  .rej-collapse .ttl{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+  .rej-newslist{margin-top:8px;display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto}
+  .news-card{border:1px solid var(--border);border-radius:6px;padding:8px;background:rgba(255,255,255,.02);font-size:12px}
+  .news-card .nh{font-weight:600;line-height:1.3;margin-bottom:3px}
+  .news-card .nm{font-size:10.5px;color:var(--text-dim);display:flex;gap:6px;flex-wrap:wrap}
+  .news-card a{color:var(--orange);text-decoration:none}
+  .reeval-banner{background:rgba(251,191,36,.1);border:1px solid var(--amber);border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:10px}
 </style>
 </head>
 <body>
@@ -306,6 +332,7 @@
 
 <nav class="tabs">
   <button data-tab="leads" class="active">Leads Pipeline</button>
+  <button data-tab="rejected">Rejected Companies</button>
   <button data-tab="modeler">Deal Modeler & XIRR Calculator</button>
   <button data-tab="documents">Documents</button>
 </nav>
@@ -380,6 +407,7 @@
     <h3>Pipeline Summary</h3>
     <div id="pipelineSummary" style="display:flex;flex-wrap:wrap;gap:18px;font-size:13px"></div>
   </div>
+  <div id="reevalBannerLeads" style="margin-top:16px"></div>
 
   <div class="card" style="margin-top:16px">
     <h3>Quarterly Review — Rejected / Lost Deals <span style="font-weight:400;color:var(--muted);font-size:12px">(competitor & market intelligence)</span></h3>
@@ -446,6 +474,61 @@
     <div class="card"><h3>Composition by Deal Type</h3><div class="chart-wrap"><canvas id="chartDealType"></canvas></div></div>
     <div class="card" style="grid-column:1/-1"><h3>Deal-wise XIRR</h3><div class="chart-wrap"><canvas id="chartDealXIRR"></canvas></div></div>
   </div>
+</section>
+
+<!-- ============ REJECTED COMPANIES ============ -->
+<section id="rejected" class="section">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px">
+    <div>
+      <h1 class="page-title">Rejected Companies</h1>
+      <div class="page-sub">Track passed deals, monitor market activity, surface re-evaluation candidates</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="refreshAllMarketNews()" title="Pull fresh news for every rejected company">↻ Refresh All News</button>
+    </div>
+  </div>
+
+  <div id="reevalBanner"></div>
+
+  <div class="rej-subtabs" id="rejSubtabs">
+    <button data-rs="all" class="active" onclick="setRejSubtab('all')">All <span class="count" id="rsCntAll">0</span></button>
+    <button data-rs="Rejected – Stage 1" onclick="setRejSubtab('Rejected – Stage 1')">Stage 1 <span class="count" id="rsCnt1">0</span></button>
+    <button data-rs="Rejected – Stage 2" onclick="setRejSubtab('Rejected – Stage 2')">Stage 2 <span class="count" id="rsCnt2">0</span></button>
+    <button data-rs="Rejected – Stage 3" onclick="setRejSubtab('Rejected – Stage 3')">Stage 3 <span class="count" id="rsCnt3">0</span></button>
+    <button data-rs="reeval" onclick="setRejSubtab('reeval')">Re-evaluate Queue <span class="count" id="rsCntRe">0</span></button>
+  </div>
+
+  <div class="toolbar">
+    <input id="rejSearch" placeholder="Search company..." class="grow" oninput="renderRejected()">
+    <select id="rejFilterSector" onchange="renderRejected()">
+      <option value="">All Sectors</option>
+      <option>Real Estate</option><option>Infrastructure</option><option>Corporate</option>
+      <option>SME</option><option>Specialty Finance</option><option>NBFC / Lending</option>
+      <option>Fintech</option><option>Consumer</option><option>Agritech</option>
+      <option>Healthcare</option><option>Logistics</option><option>EdTech</option>
+      <option>Manufacturing</option><option>Technology / SaaS</option><option>Renewable Energy</option>
+      <option>Other</option>
+    </select>
+    <select id="rejFilterDateRange" onchange="renderRejected()">
+      <option value="">Any Date</option>
+      <option value="30">Last 30 days</option>
+      <option value="90">Last 90 days</option>
+      <option value="180">Last 6 months</option>
+      <option value="365">Last 12 months</option>
+    </select>
+    <select id="rejFilterReeval" onchange="renderRejected()">
+      <option value="">All</option>
+      <option value="yes">Re-evaluate flagged</option>
+      <option value="no">Not flagged</option>
+    </select>
+    <select id="rejSort" onchange="renderRejected()">
+      <option value="recent">Most Recently Rejected</option>
+      <option value="alpha">Alphabetical</option>
+      <option value="stage">By Stage</option>
+    </select>
+  </div>
+
+  <div id="rejGrid" class="rej-grid"></div>
 </section>
 
 <!-- ============ MODELER ============ -->
@@ -716,6 +799,44 @@
   </div>
 </div></div>
 
+<div id="rejectModal" class="modal-bg"><div class="modal" style="max-width:560px">
+  <h2><span>Move to Rejected</span><span class="x" onclick="closeModal('rejectModal')">×</span></h2>
+  <form id="rejectForm" onsubmit="confirmReject(event)">
+    <div class="form-grid">
+      <div class="form-row full"><label>Company</label><input id="rjCompany" disabled></div>
+      <div class="form-row"><label>Rejection Stage *</label>
+        <select id="rjStage" required>
+          <option value="Rejected – Stage 1">Stage 1 — Initial screen</option>
+          <option value="Rejected – Stage 2">Stage 2 — After review / IC pre-read</option>
+          <option value="Rejected – Stage 3">Stage 3 — After DD / IC</option>
+        </select></div>
+      <div class="form-row"><label>Rejected By (Analyst) *</label><input id="rjAnalyst" required placeholder="Your name"></div>
+      <div class="form-row full"><label>Rejection Reason *</label>
+        <select id="rjReasonPick" onchange="onRejReasonPick(this.value)">
+          <option value="">— Pick a common reason or type custom below —</option>
+          <option>Weak management</option>
+          <option>Leverage too high</option>
+          <option>Covenant issues</option>
+          <option>Sector concern</option>
+          <option>Insufficient data</option>
+          <option>Pricing mismatch</option>
+          <option>Security / collateral inadequate</option>
+          <option>Promoter / governance concern</option>
+          <option>Cash flow concerns</option>
+          <option>Regulatory risk</option>
+          <option value="__custom">+ Other (custom)</option>
+        </select>
+        <textarea id="rjReason" required placeholder="Detailed rejection reason..." style="margin-top:8px;min-height:80px"></textarea>
+      </div>
+    </div>
+    <input type="hidden" id="rjLeadId">
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeModal('rejectModal')">Cancel</button>
+      <button type="submit" class="btn btn-danger">Confirm Rejection</button>
+    </div>
+  </form>
+</div></div>
+
 <div id="toast" class="toast"></div>
 
 <script>
@@ -980,6 +1101,7 @@ document.querySelectorAll('nav.tabs button').forEach(b=>{
     if(b.dataset.tab==='portfolio') renderPortfolio();
     if(b.dataset.tab==='analytics') renderAnalytics();
     if(b.dataset.tab==='documents') renderDocuments();
+    if(b.dataset.tab==='rejected') renderRejected();
   });
 });
 
@@ -1058,6 +1180,7 @@ function renderLeads(){
     stages.map(s=>`<div><span class="${stageClass(s)}">${s}</span> <b>${ls.filter(l=>l.stage===s).length}</b></div>`).join('') +
     `<div style="margin-left:auto"><span style="color:var(--text-dim)">Total Pipeline:</span> <b>₹${fmt(total)} Cr</b></div>`;
   renderQuarterlyReview();
+  renderReevalBanner();
 }
 function renderQuarterlyReview(){
   const box = document.getElementById('quarterlyReview');
@@ -2643,6 +2766,241 @@ async function backfillSectors(force){
   localStorage.setItem(FLAG,'1');
 }
 window.rerunSectorBackfill = () => backfillSectors(true);
+window.rerunSectorBackfill = () => backfillSectors(true);
+
+/* =========================================================
+   REJECTED COMPANIES — section, market activity, re-evaluate
+   ========================================================= */
+let _rejSubtab = 'all';
+function setRejSubtab(s){ _rejSubtab = s;
+  document.querySelectorAll('#rejSubtabs button').forEach(b=>b.classList.toggle('active', b.dataset.rs===s));
+  renderRejected();
+}
+function _isRejected(l){ return (l.stage||'').startsWith('Rejected'); }
+function _rejStageNum(s){ const m = (s||'').match(/Stage\s*(\d)/); return m?+m[1]:0; }
+function _rejList(){
+  const q = (document.getElementById('rejSearch')?.value||'').toLowerCase();
+  const sec = document.getElementById('rejFilterSector')?.value||'';
+  const dr = document.getElementById('rejFilterDateRange')?.value||'';
+  const re = document.getElementById('rejFilterReeval')?.value||'';
+  const sort = document.getElementById('rejSort')?.value||'recent';
+  const cutoff = dr ? Date.now() - (+dr)*86400000 : 0;
+  let arr = (state.leads||[]).filter(_isRejected);
+  if(_rejSubtab==='reeval') arr = arr.filter(l=>l.reevaluateFlag);
+  else if(_rejSubtab!=='all') arr = arr.filter(l=>l.stage===_rejSubtab);
+  arr = arr.filter(l=>{
+    if(q && !(l.company||'').toLowerCase().includes(q)) return false;
+    if(sec && l.sector!==sec) return false;
+    if(cutoff){ const t = new Date(l.rejectedAt||l.updatedAt||l.createdAt||0).getTime(); if(t<cutoff) return false; }
+    if(re==='yes' && !l.reevaluateFlag) return false;
+    if(re==='no' && l.reevaluateFlag) return false;
+    return true;
+  });
+  if(sort==='alpha') arr.sort((a,b)=>(a.company||'').localeCompare(b.company||''));
+  else if(sort==='stage') arr.sort((a,b)=>_rejStageNum(a.stage)-_rejStageNum(b.stage));
+  else arr.sort((a,b)=> new Date(b.rejectedAt||b.updatedAt||0) - new Date(a.rejectedAt||a.updatedAt||0));
+  return arr;
+}
+function renderRejected(){
+  const all = (state.leads||[]).filter(_isRejected);
+  const c = (n)=>document.getElementById(n);
+  if(c('rsCntAll')) c('rsCntAll').textContent = all.length;
+  if(c('rsCnt1')) c('rsCnt1').textContent = all.filter(l=>l.stage==='Rejected – Stage 1').length;
+  if(c('rsCnt2')) c('rsCnt2').textContent = all.filter(l=>l.stage==='Rejected – Stage 2').length;
+  if(c('rsCnt3')) c('rsCnt3').textContent = all.filter(l=>l.stage==='Rejected – Stage 3').length;
+  if(c('rsCntRe')) c('rsCntRe').textContent = all.filter(l=>l.reevaluateFlag).length;
+  // banner inside rejected page
+  const reCount = all.filter(l=>l.reevaluateFlag).length;
+  const banner = document.getElementById('reevalBanner');
+  if(banner){
+    banner.innerHTML = reCount ? `<div class="reeval-banner"><div>⚑ <b>${reCount}</b> compan${reCount===1?'y is':'ies are'} flagged for re-evaluation based on market activity.</div><button class="btn btn-ghost btn-sm" onclick="setRejSubtab('reeval')">View Queue →</button></div>` : '';
+  }
+  const grid = document.getElementById('rejGrid');
+  if(!grid) return;
+  const items = _rejList();
+  if(!items.length){ grid.innerHTML = '<div class="empty" style="grid-column:1/-1">No rejected companies match these filters.</div>'; return; }
+  grid.innerHTML = items.map(l=>_renderRejCard(l)).join('');
+  // auto-fetch news for cards that haven't been refreshed in 7 days
+  items.forEach(l=>{
+    const last = l.marketNewsFetchedAt ? new Date(l.marketNewsFetchedAt).getTime() : 0;
+    if(Date.now() - last > 7*86400000){ fetchMarketNews(l.id, true); }
+  });
+}
+function _renderRejCard(l){
+  const sn = _rejStageNum(l.stage);
+  const stageBadgeCls = sn===1?'rej-stage-1':sn===2?'rej-stage-2':'rej-stage-3';
+  const dateAdded = l.rejectedAt ? new Date(l.rejectedAt).toLocaleDateString() : '—';
+  const news = Array.isArray(l.marketNews) ? l.marketNews : [];
+  const lastFetched = l.marketNewsFetchedAt ? new Date(l.marketNewsFetchedAt).toLocaleDateString() : 'never';
+  const expanded = l._marketExpanded;
+  const investors = (l.coInvestors||[]).filter(Boolean);
+  return `<div class="rej-card ${l.reevaluateFlag?'flagged':''}">
+    <div class="rc-head">
+      <div>
+        <div class="rc-name" onclick="openLeadDetail('${esc(l.id)}')">${esc(l.company)}${l.reevaluateFlag?' <span title="Flagged for re-evaluation">⚑</span>':''}</div>
+        <div class="rc-meta"><span>${esc(l.sector||'—')}</span>·<span>Added: ${esc(dateAdded)}</span>${l.size?`·<span>₹${fmt(l.size)} Cr</span>`:''}</div>
+      </div>
+      <span class="badge ${stageBadgeCls}">${esc(l.stage.replace('Rejected – ',''))}</span>
+    </div>
+    <div class="rej-reason"><b style="color:var(--text-dim);font-size:10px;text-transform:uppercase;letter-spacing:.05em">Reason</b><div style="margin-top:3px;white-space:pre-wrap">${esc(l.rejectionReason||l.remarks||'No reason captured.')}</div>
+      <div style="font-size:10.5px;color:var(--text-dim);margin-top:6px">By <b>${esc(l.rejectedBy||'—')}</b></div>
+    </div>
+    <div class="rej-collapse">
+      <div class="ttl" onclick="toggleMarketActivity('${esc(l.id)}')">📡 Market Activity <span style="font-weight:400;text-transform:none;letter-spacing:0">${expanded?'▾':'▸'} <span style="color:var(--text-dim)">${news.length} item${news.length===1?'':'s'} · updated ${esc(lastFetched)}</span></span></div>
+      ${expanded ? `
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="fetchMarketNews('${esc(l.id)}', false)">↻ Refresh News</button>
+          <button class="btn btn-ghost btn-sm" onclick="addManualNews('${esc(l.id)}')">+ Manual Entry</button>
+          <button class="btn btn-ghost btn-sm" onclick="addCoInvestor('${esc(l.id)}')">+ Co-investor</button>
+        </div>
+        ${investors.length?`<div style="margin-top:8px;font-size:11.5px"><b style="color:var(--text-dim)">Co-investors:</b> ${investors.map((i,idx)=>`<span style="background:rgba(255,255,255,.06);padding:2px 7px;border-radius:10px;margin:2px 4px 2px 0;display:inline-block">${esc(i)} <span style="cursor:pointer;color:var(--text-dim)" onclick="removeCoInvestor('${esc(l.id)}',${idx})">×</span></span>`).join('')}</div>`:''}
+        <div class="rej-newslist" id="news_${esc(l.id)}">${_renderNewsList(news)}</div>
+      ` : ''}
+    </div>
+    <div class="rej-actions">
+      <button class="btn ${l.reevaluateFlag?'btn-primary':'btn-ghost'} btn-sm" onclick="toggleReevaluate('${esc(l.id)}')">${l.reevaluateFlag?'⚑ Flagged':'⚐ Flag for Re-evaluate'}</button>
+      <button class="btn btn-ghost btn-sm" onclick="moveBackToActive('${esc(l.id)}')">← Move to Active</button>
+      <button class="btn btn-ghost btn-sm" onclick="editLead('${esc(l.id)}')">Edit</button>
+    </div>
+  </div>`;
+}
+function _renderNewsList(news){
+  if(!news || !news.length) return '<div style="font-size:12px;color:var(--text-dim);padding:6px">No recent fundraising activity detected.</div>';
+  return news.map(n=>`<div class="news-card">
+    <div class="nh">${n.url?`<a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.headline)}</a>`:esc(n.headline)}</div>
+    <div class="nm"><span>${esc(n.source||'')}</span>${n.date?`<span>· ${esc(n.date)}</span>`:''}${n.investors&&n.investors.length?`<span>· Investors: ${esc(n.investors.join(', '))}</span>`:''}${n.manual?'<span>· manual</span>':''}</div>
+  </div>`).join('');
+}
+function toggleMarketActivity(id){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  l._marketExpanded = !l._marketExpanded;
+  renderRejected();
+}
+function toggleReevaluate(id){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  l.reevaluateFlag = !l.reevaluateFlag;
+  l.notesLog = l.notesLog||[]; l.notesLog.push({ts:new Date().toISOString(), text:`Re-evaluate flag ${l.reevaluateFlag?'SET':'cleared'}`});
+  save(); renderRejected(); renderReevalBanner();
+}
+async function fetchMarketNews(id, silent){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  if(!silent) toast('Fetching news for '+l.company+'…');
+  try{
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/fetch-market-news`, {
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON_KEY}`},
+      body: JSON.stringify({ company: l.company })
+    });
+    if(!r.ok){ if(!silent) toast('News fetch failed'); return; }
+    const data = await r.json();
+    const fetched = (data.news||[]).map(n=>({...n, manual:false}));
+    // merge with manual entries
+    const manual = (l.marketNews||[]).filter(n=>n.manual);
+    l.marketNews = [...fetched, ...manual].sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+    l.marketNewsFetchedAt = new Date().toISOString();
+    // auto-extract co-investors
+    const inv = new Set(l.coInvestors||[]);
+    fetched.forEach(n=>(n.investors||[]).forEach(i=>i && inv.add(i)));
+    l.coInvestors = [...inv];
+    save(); renderRejected();
+    if(!silent) toast('News updated');
+  }catch(e){ console.error(e); if(!silent) toast('News fetch error'); }
+}
+async function refreshAllMarketNews(){
+  const items = (state.leads||[]).filter(_isRejected);
+  if(!items.length){ toast('No rejected companies'); return; }
+  toast(`Refreshing news for ${items.length} compan${items.length===1?'y':'ies'}…`);
+  for(const l of items){ await fetchMarketNews(l.id, true); }
+  toast('Refresh complete');
+}
+function addManualNews(id){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  const headline = window.prompt('News headline:'); if(!headline) return;
+  const date = window.prompt('Date (YYYY-MM-DD):', new Date().toISOString().slice(0,10)); if(!date) return;
+  const url = window.prompt('Source URL:','')||'';
+  let source = ''; try{ source = url ? new URL(url).hostname.replace('www.','') : ''; }catch(_){ source = ''; }
+  l.marketNews = l.marketNews||[];
+  l.marketNews.unshift({ headline, date, url, source, manual:true, investors:[] });
+  save(); renderRejected();
+}
+function addCoInvestor(id){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  const name = window.prompt('Co-investor / lead investor name:'); if(!name) return;
+  const round = window.prompt('Round details (optional, e.g. "Series C, ₹200 Cr, Mar 2025"):','')||'';
+  l.coInvestors = l.coInvestors||[];
+  l.coInvestors.push(round ? `${name} (${round})` : name);
+  l.notesLog = l.notesLog||[]; l.notesLog.push({ts:new Date().toISOString(), text:`Co-investor logged: ${name}${round?` — ${round}`:''}`});
+  save(); renderRejected();
+}
+function removeCoInvestor(id, idx){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  if(!l.coInvestors) return;
+  l.coInvestors.splice(idx,1); save(); renderRejected();
+}
+function moveBackToActive(id){
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  const why = window.prompt(`Move "${l.company}" back to Active Pipeline. Reason (required for audit):`);
+  if(!why || !why.trim()) return;
+  const who = window.prompt('Your name (for audit log):','')||'unknown';
+  l.notesLog = l.notesLog||[];
+  l.notesLog.push({ts:new Date().toISOString(), text:`Moved from ${l.stage} → Active by ${who}. Reason: ${why.trim()}`});
+  l.stage = 'Active'; l.reevaluateFlag = false;
+  save(); renderRejected(); renderLeads(); toast('Moved to Active Pipeline');
+}
+function renderReevalBanner(){
+  const box = document.getElementById('reevalBannerLeads'); if(!box) return;
+  const re = (state.leads||[]).filter(l=>_isRejected(l) && l.reevaluateFlag);
+  if(!re.length){ box.innerHTML=''; return; }
+  box.innerHTML = `<div class="reeval-banner"><div>⚑ <b>${re.length}</b> rejected compan${re.length===1?'y':'ies'} flagged for re-evaluation: ${re.slice(0,5).map(l=>esc(l.company)).join(', ')}${re.length>5?'…':''}</div><button class="btn btn-primary btn-sm" onclick="document.querySelector('nav.tabs button[data-tab=rejected]').click()">Review →</button></div>`;
+}
+function onRejReasonPick(v){
+  const ta = document.getElementById('rjReason');
+  if(v==='__custom'){ ta.value=''; ta.focus(); }
+  else if(v){ ta.value = v; }
+}
+// Hook: open reject modal from leads (status change to a rejected stage)
+function openRejectModal(leadId, presetStage){
+  const l = state.leads.find(x=>x.id===leadId); if(!l) return;
+  document.getElementById('rjLeadId').value = leadId;
+  document.getElementById('rjCompany').value = l.company;
+  document.getElementById('rjStage').value = presetStage || l.stage || 'Rejected – Stage 1';
+  document.getElementById('rjAnalyst').value = l.rejectedBy || '';
+  document.getElementById('rjReason').value = l.rejectionReason || '';
+  document.getElementById('rjReasonPick').value = '';
+  document.getElementById('rejectModal').classList.add('open');
+}
+function confirmReject(e){
+  e.preventDefault();
+  const id = document.getElementById('rjLeadId').value;
+  const l = state.leads.find(x=>x.id===id); if(!l) return;
+  const stage = document.getElementById('rjStage').value;
+  const analyst = document.getElementById('rjAnalyst').value.trim();
+  const reason = document.getElementById('rjReason').value.trim();
+  if(!stage || !analyst || !reason){ toast('All fields required'); return; }
+  l.stage = stage;
+  l.rejectionReason = reason;
+  l.rejectedBy = analyst;
+  l.rejectedAt = new Date().toISOString();
+  l.notesLog = l.notesLog||[];
+  l.notesLog.push({ts:l.rejectedAt, text:`Rejected at ${stage} by ${analyst}. Reason: ${reason}`});
+  save(); closeModal('rejectModal'); renderLeads(); renderRejected(); toast('Lead moved to Rejected');
+}
+// Intercept quickChangeStage to prompt the rejection modal when moving into a rejected stage
+(function(){
+  if(typeof window.quickChangeStage === 'function'){
+    const orig = window.quickChangeStage;
+    window.quickChangeStage = function(id){
+      const l = state.leads.find(x=>x.id===id); if(!l) return orig(id);
+      const stages = ['Active','Passive','Rejected – Stage 1','Rejected – Stage 2','Rejected – Stage 3','Lost','Closed'];
+      const opts = stages.map((s,i)=>`${i+1}. ${s}`).join('\n');
+      const ans = window.prompt(`Change status for ${l.company}:\n${opts}\n\nEnter number:`, String(stages.indexOf(l.stage)+1 || 1));
+      if(!ans) return;
+      const n = parseInt(ans,10); if(isNaN(n)||n<1||n>stages.length) return;
+      const newStage = stages[n-1];
+      if(newStage.startsWith('Rejected')){ openRejectModal(id, newStage); return; }
+      l.stage = newStage; save(); renderLeads(); renderRejected();
+    };
+  }
+})();
 </script>
 </body>
 </html>
