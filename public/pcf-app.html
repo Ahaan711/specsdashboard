@@ -228,6 +228,32 @@
     padding:12px 18px;border-radius:8px;z-index:200;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.4);
     transform:translateY(100px);opacity:0;transition:all .3s}
   .toast.show{transform:translateY(0);opacity:1}
+  /* ---------- REJECTED ---------- */
+  .rej-subtabs{display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .rej-subtabs button{padding:9px 18px;font-weight:600;color:var(--text-dim);border-bottom:2px solid transparent;font-size:13px}
+  .rej-subtabs button.active{color:var(--orange);border-bottom-color:var(--orange)}
+  .rej-subtabs button .count{background:var(--card-2);color:var(--text-dim);padding:1px 7px;border-radius:10px;font-size:10px;margin-left:6px}
+  .rej-subtabs button.active .count{background:var(--orange);color:#fff}
+  .rej-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px}
+  .rej-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px}
+  .rej-card.flagged{border-color:var(--amber);box-shadow:0 0 0 1px rgba(251,191,36,.25)}
+  .rej-card .rc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .rej-card .rc-name{font-weight:700;font-size:14px;cursor:pointer}
+  .rej-card .rc-name:hover{color:var(--orange)}
+  .rej-card .rc-meta{font-size:11px;color:var(--text-dim);display:flex;gap:8px;flex-wrap:wrap}
+  .rej-stage-1{background:rgba(251,191,36,.18);color:var(--amber)}
+  .rej-stage-2{background:rgba(255,117,83,.2);color:var(--orange)}
+  .rej-stage-3{background:rgba(248,113,113,.2);color:var(--red-neg)}
+  .rej-reason{font-size:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text)}
+  .rej-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
+  .rej-collapse{border-top:1px dashed var(--border);padding-top:8px;margin-top:4px}
+  .rej-collapse .ttl{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+  .rej-newslist{margin-top:8px;display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto}
+  .news-card{border:1px solid var(--border);border-radius:6px;padding:8px;background:rgba(255,255,255,.02);font-size:12px}
+  .news-card .nh{font-weight:600;line-height:1.3;margin-bottom:3px}
+  .news-card .nm{font-size:10.5px;color:var(--text-dim);display:flex;gap:6px;flex-wrap:wrap}
+  .news-card a{color:var(--orange);text-decoration:none}
+  .reeval-banner{background:rgba(251,191,36,.1);border:1px solid var(--amber);border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:10px}
 </style>
 </head>
 <body>
