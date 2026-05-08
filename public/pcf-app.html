@@ -3018,7 +3018,11 @@ function confirmReject(e){
       const n = parseInt(ans,10); if(isNaN(n)||n<1||n>stages.length) return;
       const newStage = stages[n-1];
       if(newStage.startsWith('Rejected')){ openRejectModal(id, newStage); return; }
-      l.stage = newStage; save(); renderLeads(); renderRejected();
+      const wasRej = (l.stage||'').startsWith('Rejected');
+      l.stage = newStage;
+      l.notesLog = l.notesLog || [];
+      if(wasRej) l.notesLog.push({ts:new Date().toISOString(), text:`Moved out of Rejected → ${newStage}`});
+      save(); renderLeads(); renderRejected(); try{renderReevalBanner();}catch(_){ }
     };
   }
 })();
