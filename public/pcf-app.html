@@ -1685,10 +1685,22 @@ async function saveLead(e){
   } else if(prev && prev.preDDDocId){
     obj.preDDDocId = prev.preDDDocId;
   }
+  // Stamp rejection metadata when stage transitions into / out of Rejected
+  const wasRejected = prev && (prev.stage||'').startsWith('Rejected');
+  if(isRejected){
+    if(!obj.rejectedAt || (prev && prev.stage !== obj.stage)) obj.rejectedAt = new Date().toISOString();
+    if(prev && prev.stage !== obj.stage){
+      obj.notesLog.push({ts:obj.rejectedAt, text:`Stage set to ${obj.stage}${obj.remarks?` — ${obj.remarks}`:''}`});
+    }
+  } else if(wasRejected){
+    obj.notesLog.push({ts:new Date().toISOString(), text:`Moved out of Rejected → ${obj.stage}`});
+  }
   const idx = state.leads.findIndex(x=>x.id===obj.id);
   if(idx<0) state.leads.push(obj);
   else state.leads[idx] = {...state.leads[idx], ...obj};
-  save(); closeModal('leadModal'); renderLeads(); toast('Lead saved');
+  save(); closeModal('leadModal'); renderLeads();
+  try{ renderRejected(); renderReevalBanner(); }catch(_){ }
+  toast('Lead saved');
 }
 
 async function _extractTextFromFile(file){
