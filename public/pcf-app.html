@@ -933,6 +933,8 @@ function cloudSubscribe(){
       _hydrateFrom(v);
       // Re-render whatever is visible
       try{ if(document.getElementById('leads')?.classList.contains('active')) renderLeads(); }catch(_){}
+      try{ if(document.getElementById('rejected')?.classList.contains('active')) renderRejected(); }catch(_){}
+      try{ renderReevalBanner(); }catch(_){}
       try{ if(document.getElementById('portfolio')?.classList.contains('active')) renderPortfolio(); }catch(_){}
       try{ if(document.getElementById('documents')?.classList.contains('active')) renderDocuments(); }catch(_){}
       toast('🔄 Synced from cloud');
@@ -1685,10 +1687,22 @@ async function saveLead(e){
   } else if(prev && prev.preDDDocId){
     obj.preDDDocId = prev.preDDDocId;
   }
+  // Stamp rejection metadata when stage transitions into / out of Rejected
+  const wasRejected = prev && (prev.stage||'').startsWith('Rejected');
+  if(isRejected){
+    if(!obj.rejectedAt || (prev && prev.stage !== obj.stage)) obj.rejectedAt = new Date().toISOString();
+    if(prev && prev.stage !== obj.stage){
+      obj.notesLog.push({ts:obj.rejectedAt, text:`Stage set to ${obj.stage}${obj.remarks?` — ${obj.remarks}`:''}`});
+    }
+  } else if(wasRejected){
+    obj.notesLog.push({ts:new Date().toISOString(), text:`Moved out of Rejected → ${obj.stage}`});
+  }
   const idx = state.leads.findIndex(x=>x.id===obj.id);
   if(idx<0) state.leads.push(obj);
   else state.leads[idx] = {...state.leads[idx], ...obj};
-  save(); closeModal('leadModal'); renderLeads(); toast('Lead saved');
+  save(); closeModal('leadModal'); renderLeads();
+  try{ renderRejected(); renderReevalBanner(); }catch(_){ }
+  toast('Lead saved');
 }
 
 async function _extractTextFromFile(file){
@@ -1763,8 +1777,11 @@ function quickChangeStage(id){
   const ns = window.prompt(`Change status for ${l.company}.\nOptions:\n  ${stages.join('\n  ')}\nCurrent: ${l.stage}`, l.stage);
   if(!ns || !stages.includes(ns)) return;
   if(ns === l.stage) return;
+  if(ns.startsWith('Rejected')){ openRejectModal(id, ns); return; }
+  const wasRej = (l.stage||'').startsWith('Rejected');
   l.stage = ns;
-  if(ns.startsWith('Rejected') || ns==='Passive' || ns==='Lost'){
+  l.notesLog = l.notesLog || [];
+  if(ns==='Passive' || ns==='Lost'){
     const r = window.prompt(`Marked as "${ns}". Add a remark for future recall:`, l.remarks||'');
     if(r!==null) l.remarks = r.trim();
   }
@@ -1774,11 +1791,15 @@ function quickChangeStage(id){
     const kt = window.prompt('Key terms of the winning bid (rate / tenor / structure):', l.lostTerms||'');
     if(kt!==null) l.lostTerms = kt.trim();
   }
-  save(); renderLeads(); toast('Status updated');
+  if(wasRej) l.notesLog.push({ts:new Date().toISOString(), text:`Moved out of Rejected → ${ns}`});
+  save(); renderLeads();
+  try{ renderRejected(); renderReevalBanner(); }catch(_){ }
+  toast('Status updated');
 }
 function delLead(id){
   if(!confirm('Delete this lead?')) return;
   state.leads = state.leads.filter(x=>x.id!==id); save(); renderLeads();
+  try{ renderRejected(); renderReevalBanner(); }catch(_){ }
 }
 function convertLead(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
@@ -2982,7 +3003,7 @@ function confirmReject(e){
   l.rejectedAt = new Date().toISOString();
   l.notesLog = l.notesLog||[];
   l.notesLog.push({ts:l.rejectedAt, text:`Rejected at ${stage} by ${analyst}. Reason: ${reason}`});
-  save(); closeModal('rejectModal'); renderLeads(); renderRejected(); toast('Lead moved to Rejected');
+  save(); closeModal('rejectModal'); renderLeads(); renderRejected(); try{renderReevalBanner();}catch(_){ } toast('Lead moved to Rejected');
 }
 // Intercept quickChangeStage to prompt the rejection modal when moving into a rejected stage
 (function(){
@@ -2997,7 +3018,11 @@ function confirmReject(e){
       const n = parseInt(ans,10); if(isNaN(n)||n<1||n>stages.length) return;
       const newStage = stages[n-1];
       if(newStage.startsWith('Rejected')){ openRejectModal(id, newStage); return; }
-      l.stage = newStage; save(); renderLeads(); renderRejected();
+      const wasRej = (l.stage||'').startsWith('Rejected');
+      l.stage = newStage;
+      l.notesLog = l.notesLog || [];
+      if(wasRej) l.notesLog.push({ts:new Date().toISOString(), text:`Moved out of Rejected → ${newStage}`});
+      save(); renderLeads(); renderRejected(); try{renderReevalBanner();}catch(_){ }
     };
   }
 })();
