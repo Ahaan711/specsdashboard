@@ -933,6 +933,8 @@ function cloudSubscribe(){
       _hydrateFrom(v);
       // Re-render whatever is visible
       try{ if(document.getElementById('leads')?.classList.contains('active')) renderLeads(); }catch(_){}
+      try{ if(document.getElementById('rejected')?.classList.contains('active')) renderRejected(); }catch(_){}
+      try{ renderReevalBanner(); }catch(_){}
       try{ if(document.getElementById('portfolio')?.classList.contains('active')) renderPortfolio(); }catch(_){}
       try{ if(document.getElementById('documents')?.classList.contains('active')) renderDocuments(); }catch(_){}
       toast('🔄 Synced from cloud');
