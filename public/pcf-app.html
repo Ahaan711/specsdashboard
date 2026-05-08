@@ -1775,8 +1775,11 @@ function quickChangeStage(id){
   const ns = window.prompt(`Change status for ${l.company}.\nOptions:\n  ${stages.join('\n  ')}\nCurrent: ${l.stage}`, l.stage);
   if(!ns || !stages.includes(ns)) return;
   if(ns === l.stage) return;
+  if(ns.startsWith('Rejected')){ openRejectModal(id, ns); return; }
+  const wasRej = (l.stage||'').startsWith('Rejected');
   l.stage = ns;
-  if(ns.startsWith('Rejected') || ns==='Passive' || ns==='Lost'){
+  l.notesLog = l.notesLog || [];
+  if(ns==='Passive' || ns==='Lost'){
     const r = window.prompt(`Marked as "${ns}". Add a remark for future recall:`, l.remarks||'');
     if(r!==null) l.remarks = r.trim();
   }
@@ -1786,11 +1789,15 @@ function quickChangeStage(id){
     const kt = window.prompt('Key terms of the winning bid (rate / tenor / structure):', l.lostTerms||'');
     if(kt!==null) l.lostTerms = kt.trim();
   }
-  save(); renderLeads(); toast('Status updated');
+  if(wasRej) l.notesLog.push({ts:new Date().toISOString(), text:`Moved out of Rejected → ${ns}`});
+  save(); renderLeads();
+  try{ renderRejected(); renderReevalBanner(); }catch(_){ }
+  toast('Status updated');
 }
 function delLead(id){
   if(!confirm('Delete this lead?')) return;
   state.leads = state.leads.filter(x=>x.id!==id); save(); renderLeads();
+  try{ renderRejected(); renderReevalBanner(); }catch(_){ }
 }
 function convertLead(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
