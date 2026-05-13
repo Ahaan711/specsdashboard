@@ -898,12 +898,17 @@ function _stateSnapshot(){
 }
 function _hydrateFrom(payload){
   if(!payload || typeof payload !== 'object') return;
-  if(Array.isArray(payload.leads)) state.leads = payload.leads.map(l=>l&&l.stage==='Completed'?{...l,stage:'Closed'}:l);
-  if(Array.isArray(payload.deals)) state.deals = payload.deals;
+  // Merge by id so an incoming remote snapshot cannot wipe locally-edited
+  // or locally-added entries that haven't been pushed yet.
+  if(Array.isArray(payload.leads)){
+    const remote = payload.leads.map(l=>l&&l.stage==='Completed'?{...l,stage:'Closed'}:l);
+    state.leads = _mergeById(state.leads, remote);
+  }
+  if(Array.isArray(payload.deals)) state.deals = _mergeById(state.deals, payload.deals);
   if(payload.cashflows && typeof payload.cashflows==='object') state.cashflows = payload.cashflows;
   if(payload.fund && typeof payload.fund==='object') state.fund = payload.fund;
-  if(Array.isArray(payload.distributions)) state.distributions = payload.distributions;
-  if(Array.isArray(payload.documents)) state.documents = payload.documents;
+  if(Array.isArray(payload.distributions)) state.distributions = _mergeById(state.distributions, payload.distributions);
+  if(Array.isArray(payload.documents)) state.documents = _mergeById(state.documents, payload.documents);
   // mirror to localStorage so offline still works
   localStorage.setItem(KEYS.leads, JSON.stringify(state.leads));
   localStorage.setItem(KEYS.deals, JSON.stringify(state.deals));
@@ -911,6 +916,8 @@ function _hydrateFrom(payload){
   localStorage.setItem(KEYS.fund, JSON.stringify(state.fund));
   localStorage.setItem(KEYS.distributions, JSON.stringify(state.distributions));
   localStorage.setItem(KEYS.documents, JSON.stringify(state.documents));
+  // After absorbing remote, push our merged view back so other clients converge
+  if(_cloudReady) cloudPushDebounced();
 }
 async function cloudHydrate(){
   if(!_sb) return false;
