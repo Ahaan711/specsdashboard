@@ -859,7 +859,24 @@ function save(){
   localStorage.setItem(KEYS.fund, JSON.stringify(state.fund));
   localStorage.setItem(KEYS.distributions, JSON.stringify(state.distributions));
   localStorage.setItem(KEYS.documents, JSON.stringify(state.documents));
-  cloudPushDebounced();
+  // Push immediately so an incoming remote sync can't overwrite in-flight local edits
+  if(_sb && _cloudReady){ cloudPush(); } else { cloudPushDebounced(); }
+}
+// Merge two arrays of objects by id; prefer the entry with the newer updatedAt.
+// Items without updatedAt are kept (treated as oldest) so local-only entries survive.
+function _mergeById(localArr, remoteArr){
+  const map = new Map();
+  (Array.isArray(localArr)?localArr:[]).forEach(l=>{ if(l && l.id) map.set(l.id, l); });
+  (Array.isArray(remoteArr)?remoteArr:[]).forEach(r=>{
+    if(!r || !r.id) return;
+    const cur = map.get(r.id);
+    if(!cur){ map.set(r.id, r); return; }
+    const tCur = +new Date(cur.updatedAt||cur.rejectedAt||0)||0;
+    const tNew = +new Date(r.updatedAt||r.rejectedAt||0)||0;
+    // If remote is strictly newer, take it; otherwise keep local (protects unpushed edits)
+    map.set(r.id, tNew > tCur ? r : cur);
+  });
+  return Array.from(map.values());
 }
 
 /* =========================================================
@@ -881,12 +898,17 @@ function _stateSnapshot(){
 }
 function _hydrateFrom(payload){
   if(!payload || typeof payload !== 'object') return;
-  if(Array.isArray(payload.leads)) state.leads = payload.leads.map(l=>l&&l.stage==='Completed'?{...l,stage:'Closed'}:l);
-  if(Array.isArray(payload.deals)) state.deals = payload.deals;
+  // Merge by id so an incoming remote snapshot cannot wipe locally-edited
+  // or locally-added entries that haven't been pushed yet.
+  if(Array.isArray(payload.leads)){
+    const remote = payload.leads.map(l=>l&&l.stage==='Completed'?{...l,stage:'Closed'}:l);
+    state.leads = _mergeById(state.leads, remote);
+  }
+  if(Array.isArray(payload.deals)) state.deals = _mergeById(state.deals, payload.deals);
   if(payload.cashflows && typeof payload.cashflows==='object') state.cashflows = payload.cashflows;
   if(payload.fund && typeof payload.fund==='object') state.fund = payload.fund;
-  if(Array.isArray(payload.distributions)) state.distributions = payload.distributions;
-  if(Array.isArray(payload.documents)) state.documents = payload.documents;
+  if(Array.isArray(payload.distributions)) state.distributions = _mergeById(state.distributions, payload.distributions);
+  if(Array.isArray(payload.documents)) state.documents = _mergeById(state.documents, payload.documents);
   // mirror to localStorage so offline still works
   localStorage.setItem(KEYS.leads, JSON.stringify(state.leads));
   localStorage.setItem(KEYS.deals, JSON.stringify(state.deals));
@@ -894,6 +916,8 @@ function _hydrateFrom(payload){
   localStorage.setItem(KEYS.fund, JSON.stringify(state.fund));
   localStorage.setItem(KEYS.distributions, JSON.stringify(state.distributions));
   localStorage.setItem(KEYS.documents, JSON.stringify(state.documents));
+  // After absorbing remote, push our merged view back so other clients converge
+  if(_cloudReady) cloudPushDebounced();
 }
 async function cloudHydrate(){
   if(!_sb) return false;
@@ -1697,6 +1721,7 @@ async function saveLead(e){
   } else if(wasRejected){
     obj.notesLog.push({ts:new Date().toISOString(), text:`Moved out of Rejected → ${obj.stage}`});
   }
+  obj.updatedAt = new Date().toISOString();
   const idx = state.leads.findIndex(x=>x.id===obj.id);
   if(idx<0) state.leads.push(obj);
   else state.leads[idx] = {...state.leads[idx], ...obj};
@@ -1769,7 +1794,7 @@ function editRemarks(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
   const r = window.prompt(`Remarks for ${l.company} (status: ${l.stage}):`, l.remarks||'');
   if(r===null) return;
-  l.remarks = r.trim(); save(); renderLeads(); toast('Remarks updated');
+  l.remarks = r.trim(); l.updatedAt = new Date().toISOString(); save(); renderLeads(); toast('Remarks updated');
 }
 function quickChangeStage(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
@@ -1792,6 +1817,7 @@ function quickChangeStage(id){
     if(kt!==null) l.lostTerms = kt.trim();
   }
   if(wasRej) l.notesLog.push({ts:new Date().toISOString(), text:`Moved out of Rejected → ${ns}`});
+  l.updatedAt = new Date().toISOString();
   save(); renderLeads();
   try{ renderRejected(); renderReevalBanner(); }catch(_){ }
   toast('Status updated');
@@ -3003,6 +3029,7 @@ function confirmReject(e){
   l.rejectedAt = new Date().toISOString();
   l.notesLog = l.notesLog||[];
   l.notesLog.push({ts:l.rejectedAt, text:`Rejected at ${stage} by ${analyst}. Reason: ${reason}`});
+  l.updatedAt = l.rejectedAt;
   save(); closeModal('rejectModal'); renderLeads(); renderRejected(); try{renderReevalBanner();}catch(_){ } toast('Lead moved to Rejected');
 }
 // Intercept quickChangeStage to prompt the rejection modal when moving into a rejected stage
@@ -3022,6 +3049,7 @@ function confirmReject(e){
       l.stage = newStage;
       l.notesLog = l.notesLog || [];
       if(wasRej) l.notesLog.push({ts:new Date().toISOString(), text:`Moved out of Rejected → ${newStage}`});
+      l.updatedAt = new Date().toISOString();
       save(); renderLeads(); renderRejected(); try{renderReevalBanner();}catch(_){ }
     };
   }
