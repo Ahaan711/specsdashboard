@@ -3049,6 +3049,7 @@ function confirmReject(e){
       l.stage = newStage;
       l.notesLog = l.notesLog || [];
       if(wasRej) l.notesLog.push({ts:new Date().toISOString(), text:`Moved out of Rejected → ${newStage}`});
+      l.updatedAt = new Date().toISOString();
       save(); renderLeads(); renderRejected(); try{renderReevalBanner();}catch(_){ }
     };
   }
