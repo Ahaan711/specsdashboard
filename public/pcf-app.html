@@ -3029,6 +3029,7 @@ function confirmReject(e){
   l.rejectedAt = new Date().toISOString();
   l.notesLog = l.notesLog||[];
   l.notesLog.push({ts:l.rejectedAt, text:`Rejected at ${stage} by ${analyst}. Reason: ${reason}`});
+  l.updatedAt = l.rejectedAt;
   save(); closeModal('rejectModal'); renderLeads(); renderRejected(); try{renderReevalBanner();}catch(_){ } toast('Lead moved to Rejected');
 }
 // Intercept quickChangeStage to prompt the rejection modal when moving into a rejected stage
