@@ -859,7 +859,24 @@ function save(){
   localStorage.setItem(KEYS.fund, JSON.stringify(state.fund));
   localStorage.setItem(KEYS.distributions, JSON.stringify(state.distributions));
   localStorage.setItem(KEYS.documents, JSON.stringify(state.documents));
-  cloudPushDebounced();
+  // Push immediately so an incoming remote sync can't overwrite in-flight local edits
+  if(_sb && _cloudReady){ cloudPush(); } else { cloudPushDebounced(); }
+}
+// Merge two arrays of objects by id; prefer the entry with the newer updatedAt.
+// Items without updatedAt are kept (treated as oldest) so local-only entries survive.
+function _mergeById(localArr, remoteArr){
+  const map = new Map();
+  (Array.isArray(localArr)?localArr:[]).forEach(l=>{ if(l && l.id) map.set(l.id, l); });
+  (Array.isArray(remoteArr)?remoteArr:[]).forEach(r=>{
+    if(!r || !r.id) return;
+    const cur = map.get(r.id);
+    if(!cur){ map.set(r.id, r); return; }
+    const tCur = +new Date(cur.updatedAt||cur.rejectedAt||0)||0;
+    const tNew = +new Date(r.updatedAt||r.rejectedAt||0)||0;
+    // If remote is strictly newer, take it; otherwise keep local (protects unpushed edits)
+    map.set(r.id, tNew > tCur ? r : cur);
+  });
+  return Array.from(map.values());
 }
 
 /* =========================================================
