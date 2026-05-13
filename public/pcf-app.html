@@ -1794,7 +1794,7 @@ function editRemarks(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
   const r = window.prompt(`Remarks for ${l.company} (status: ${l.stage}):`, l.remarks||'');
   if(r===null) return;
-  l.remarks = r.trim(); save(); renderLeads(); toast('Remarks updated');
+  l.remarks = r.trim(); l.updatedAt = new Date().toISOString(); save(); renderLeads(); toast('Remarks updated');
 }
 function quickChangeStage(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
