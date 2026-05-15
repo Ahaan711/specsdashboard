@@ -843,7 +843,7 @@
 /* =========================================================
    STATE & PERSISTENCE
    ========================================================= */
-const KEYS = { leads:'pcf_leads', deals:'pcf_deals', cashflows:'pcf_cashflows', fund:'pcf_fund', distributions:'pcf_distributions', documents:'pcf_documents' };
+const KEYS = { leads:'pcf_leads', deals:'pcf_deals', cashflows:'pcf_cashflows', fund:'pcf_fund', distributions:'pcf_distributions', documents:'pcf_documents', rev:'pcf_state_rev' };
 let state = {
   leads: JSON.parse(localStorage.getItem(KEYS.leads) || '[]'),
   deals: JSON.parse(localStorage.getItem(KEYS.deals) || '[]'),
@@ -852,13 +852,30 @@ let state = {
   distributions: JSON.parse(localStorage.getItem(KEYS.distributions) || '[]'),
   documents: JSON.parse(localStorage.getItem(KEYS.documents) || '[]'),
 };
+let _localRev = +(localStorage.getItem(KEYS.rev) || '0') || 0;
+let _storageWarningShown = false;
+function _persistLocalState(){
+  try{
+    localStorage.setItem(KEYS.leads, JSON.stringify(state.leads));
+    localStorage.setItem(KEYS.deals, JSON.stringify(state.deals));
+    localStorage.setItem(KEYS.cashflows, JSON.stringify(state.cashflows));
+    localStorage.setItem(KEYS.fund, JSON.stringify(state.fund));
+    localStorage.setItem(KEYS.distributions, JSON.stringify(state.distributions));
+    localStorage.setItem(KEYS.documents, JSON.stringify(state.documents));
+    localStorage.setItem(KEYS.rev, String(_localRev));
+    return true;
+  }catch(err){
+    console.warn('[storage] local persist failed', err);
+    if(!_storageWarningShown){
+      _storageWarningShown = true;
+      setTimeout(()=>toast('Browser storage is full — keeping the latest data in cloud sync and current session.'), 0);
+    }
+    return false;
+  }
+}
 function save(){
-  localStorage.setItem(KEYS.leads, JSON.stringify(state.leads));
-  localStorage.setItem(KEYS.deals, JSON.stringify(state.deals));
-  localStorage.setItem(KEYS.cashflows, JSON.stringify(state.cashflows));
-  localStorage.setItem(KEYS.fund, JSON.stringify(state.fund));
-  localStorage.setItem(KEYS.distributions, JSON.stringify(state.distributions));
-  localStorage.setItem(KEYS.documents, JSON.stringify(state.documents));
+  _localRev += 1;
+  _persistLocalState();
   // Push immediately so an incoming remote sync can't overwrite in-flight local edits
   if(_sb && _cloudReady){ cloudPush(); } else { cloudPushDebounced(); }
 }
@@ -884,7 +901,8 @@ function _mergeById(localArr, remoteArr){
    ========================================================= */
 const SUPABASE_URL = 'https://ablomcksgyilrffmvojp.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFibG9tY2tzZ3lpbHJmZm12b2pwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNTI0MzQsImV4cCI6MjA5MjkyODQzNH0.aTIdWvSysVpkOELJ3zC_-hL74Cf_8_JVt6tnLpLifcc';
-const SHARED_KEY = 'app_v1';
+const SHARED_KEYS = ['app_v1','app-state'];
+const PRIMARY_SHARED_KEY = SHARED_KEYS[0];
 const _sb = (window.supabase && window.supabase.createClient)
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth:{ persistSession:false } })
   : null;
@@ -894,10 +912,13 @@ let _lastPushedHash = '';
 function _stateSnapshot(){
   return { leads:state.leads, deals:state.deals, cashflows:state.cashflows,
            fund:state.fund, distributions:state.distributions, documents:state.documents,
-           _client: CLIENT_ID, _ts: Date.now() };
+           _client: CLIENT_ID, _ts: Date.now(), _rev: _localRev };
 }
 function _hydrateFrom(payload){
   if(!payload || typeof payload !== 'object') return;
+  const incomingRev = +payload._rev || 0;
+  if(incomingRev && incomingRev < _localRev) return;
+  if(incomingRev) _localRev = Math.max(_localRev, incomingRev);
   // Merge by id so an incoming remote snapshot cannot wipe locally-edited
   // or locally-added entries that haven't been pushed yet.
   if(Array.isArray(payload.leads)){
@@ -905,26 +926,32 @@ function _hydrateFrom(payload){
     state.leads = _mergeById(state.leads, remote);
   }
   if(Array.isArray(payload.deals)) state.deals = _mergeById(state.deals, payload.deals);
-  if(payload.cashflows && typeof payload.cashflows==='object') state.cashflows = payload.cashflows;
-  if(payload.fund && typeof payload.fund==='object') state.fund = payload.fund;
+  if(payload.cashflows && typeof payload.cashflows==='object') state.cashflows = { ...(state.cashflows||{}), ...payload.cashflows };
+  if(payload.fund && typeof payload.fund==='object') state.fund = { ...(state.fund||{}), ...payload.fund };
   if(Array.isArray(payload.distributions)) state.distributions = _mergeById(state.distributions, payload.distributions);
   if(Array.isArray(payload.documents)) state.documents = _mergeById(state.documents, payload.documents);
   // mirror to localStorage so offline still works
-  localStorage.setItem(KEYS.leads, JSON.stringify(state.leads));
-  localStorage.setItem(KEYS.deals, JSON.stringify(state.deals));
-  localStorage.setItem(KEYS.cashflows, JSON.stringify(state.cashflows));
-  localStorage.setItem(KEYS.fund, JSON.stringify(state.fund));
-  localStorage.setItem(KEYS.distributions, JSON.stringify(state.distributions));
-  localStorage.setItem(KEYS.documents, JSON.stringify(state.documents));
+  _persistLocalState();
   // After absorbing remote, push our merged view back so other clients converge
   if(_cloudReady) cloudPushDebounced();
 }
 async function cloudHydrate(){
   if(!_sb) return false;
   try{
-    const { data, error } = await _sb.from('shared_state').select('value').eq('key', SHARED_KEY).maybeSingle();
+    const { data, error } = await _sb.from('shared_state').select('key,value,updated_at').in('key', SHARED_KEYS);
     if(error){ console.warn('[cloud] hydrate', error); return false; }
-    if(data && data.value){ _hydrateFrom(data.value); _cloudReady = true; return true; }
+    if(Array.isArray(data) && data.length){
+      data
+        .slice()
+        .sort((a,b)=>{
+          const revA = +(a?.value?._rev || 0), revB = +(b?.value?._rev || 0);
+          if(revA !== revB) return revA - revB;
+          return +new Date(a.updated_at||0) - +new Date(b.updated_at||0);
+        })
+        .forEach(row=> row?.value && _hydrateFrom(row.value));
+      _cloudReady = true;
+      return true;
+    }
     // No row yet — seed from current localStorage state
     _cloudReady = true;
     await cloudPush();
@@ -940,18 +967,22 @@ function cloudPushDebounced(){
 async function cloudPush(){
   if(!_sb || !_cloudReady) return;
   const snap = _stateSnapshot();
-  const hash = (snap.leads.length+'/'+snap.deals.length+'/'+snap.documents.length+'/'+snap._ts);
+  const hash = JSON.stringify([snap._rev, snap.leads.length, snap.deals.length, snap.documents.length]);
+  if(hash === _lastPushedHash) return;
   _lastPushedHash = hash;
   try{
-    const { error } = await _sb.from('shared_state').upsert({ key: SHARED_KEY, value: snap, updated_at: new Date().toISOString() });
-    if(error) console.warn('[cloud] push', error);
+    const rows = SHARED_KEYS.map(key => ({ key, value: snap, updated_at: new Date().toISOString() }));
+    const { error } = await _sb.from('shared_state').upsert(rows);
+    if(error){ console.warn('[cloud] push', error); _lastPushedHash = ''; }
   } catch(e){ console.warn('[cloud] push ex', e); }
 }
 function cloudSubscribe(){
   if(!_sb) return;
-  _sb.channel('shared_state_'+SHARED_KEY)
-    .on('postgres_changes', { event:'*', schema:'public', table:'shared_state', filter:`key=eq.${SHARED_KEY}` }, (payload)=>{
+  _sb.channel('shared_state_sync')
+    .on('postgres_changes', { event:'*', schema:'public', table:'shared_state' }, (payload)=>{
       const v = payload.new && payload.new.value;
+      const key = payload.new && payload.new.key;
+      if(!SHARED_KEYS.includes(key)) return;
       if(!v) return;
       if(v._client === CLIENT_ID) return; // ignore our own echo
       _hydrateFrom(v);
