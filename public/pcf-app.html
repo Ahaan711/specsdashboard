@@ -1907,6 +1907,7 @@ function saveDeal(e){
   if(obj.dealType==='Other' && (obj.dealTypeOther||'').trim()) obj.dealType = obj.dealTypeOther.trim();
   delete obj.sectorOther; delete obj.dealTypeOther;
   obj.tranches = collectTranches();
+  obj.updatedAt = new Date().toISOString();
   if(!obj.id){ obj.id = uid(); state.deals.push(obj); } else {
     const i = state.deals.findIndex(x=>x.id===obj.id); if(i>=0) state.deals[i] = {...state.deals[i], ...obj};
   }
@@ -1965,6 +1966,7 @@ function renderCF(){
 function updateCF(i,field,val){
   state.cashflows[cfDealId][i][field] = +val;
   state.cashflows[cfDealId][i].total = +(+state.cashflows[cfDealId][i].principal + +state.cashflows[cfDealId][i].interest).toFixed(4);
+  const d = state.deals.find(x=>x.id===cfDealId); if(d) d.updatedAt = new Date().toISOString();
   save(); renderPortfolio();
 }
 function exportCFCSV(){
@@ -2698,6 +2700,7 @@ async function saveDocument(file, kind, meta){
       kind: kind || 'other',           // excel-import | term-sheet | other
       size: file.size || 0,
       uploadedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       dataUrl,
       note: meta.note || '',
       linkedCompany: meta.linkedCompany || '',
@@ -2706,15 +2709,7 @@ async function saveDocument(file, kind, meta){
     };
     state.documents = state.documents || [];
     state.documents.unshift(doc);
-    try { save(); }
-    catch(e){
-      // localStorage quota — drop oldest until it fits
-      while(state.documents.length>1){
-        state.documents.pop();
-        try { save(); break; } catch(_){}
-      }
-      toast('Storage full — older documents removed');
-    }
+    save();
     if(document.getElementById('documents').classList.contains('active')) renderDocuments();
   } catch(err){
     console.error(err);
