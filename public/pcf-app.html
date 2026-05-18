@@ -903,12 +903,16 @@ const SUPABASE_URL = 'https://ablomcksgyilrffmvojp.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFibG9tY2tzZ3lpbHJmZm12b2pwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNTI0MzQsImV4cCI6MjA5MjkyODQzNH0.aTIdWvSysVpkOELJ3zC_-hL74Cf_8_JVt6tnLpLifcc';
 const SHARED_KEYS = ['app_v1','app-state'];
 const PRIMARY_SHARED_KEY = SHARED_KEYS[0];
+const DOCS_INDEX_KEY = 'app_docs_index_v1';
+const DOCS_CHUNK_PREFIX = 'app_docs_v1_';
+const DOCS_CHUNK_MAX_BYTES = 700000;
 const _sb = (window.supabase && window.supabase.createClient)
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth:{ persistSession:false } })
   : null;
 const CLIENT_ID = Math.random().toString(36).slice(2,10) + Date.now();
 let _cloudReady = false;
 let _lastPushedHash = '';
+let _lastPushedDocsHash = '';
 let _lastHydratedRev = 0;
 let _cloudPushInFlight = false;
 let _cloudPullInFlight = false;
@@ -916,32 +920,89 @@ let _cloudRetryTimer = null;
 let _cloudPollTimer = null;
 function _stateSnapshot(){
   return { leads:state.leads, deals:state.deals, cashflows:state.cashflows,
-           fund:state.fund, distributions:state.distributions, documents:state.documents,
-           _client: CLIENT_ID, _ts: Date.now(), _rev: _localRev };
+           fund:state.fund, distributions:state.distributions,
+           _client: CLIENT_ID, _ts: Date.now(), _rev: _localRev,
+           _documentCount: (state.documents||[]).length };
 }
-function _hydrateFrom(payload){
+function _documentRowsSnapshot(){
+  const docs = Array.isArray(state.documents) ? state.documents : [];
+  const chunks = [];
+  let chunk = [];
+  let bytes = 2;
+  docs.forEach(doc => {
+    const text = JSON.stringify(doc||{});
+    if(chunk.length && (bytes + text.length + 1) > DOCS_CHUNK_MAX_BYTES){
+      chunks.push(chunk);
+      chunk = [];
+      bytes = 2;
+    }
+    chunk.push(doc);
+    bytes += text.length + 1;
+  });
+  if(chunk.length || !chunks.length) chunks.push(chunk);
+  const nowIso = new Date().toISOString();
+  const ts = Date.now();
+  const keys = chunks.map((_, i) => `${DOCS_CHUNK_PREFIX}${i+1}`);
+  return [
+    { key: DOCS_INDEX_KEY, value: { _client: CLIENT_ID, _ts: ts, _rev: _localRev, keys, count: docs.length }, updated_at: nowIso },
+    ...chunks.map((documents, i) => ({
+      key: `${DOCS_CHUNK_PREFIX}${i+1}`,
+      value: { _client: CLIENT_ID, _ts: ts, _rev: _localRev, documents },
+      updated_at: nowIso,
+    }))
+  ];
+}
+function _applyDocumentsFromCloud(docs, opts){
+  if(!Array.isArray(docs)) return;
+  state.documents = opts && opts.force ? docs.slice() : _mergeById(state.documents, docs);
+}
+function _hydrateFrom(payload, opts){
+  opts = opts || {};
   if(!payload || typeof payload !== 'object') return;
   const incomingRev = +payload._rev || 0;
-  if(incomingRev && incomingRev < _localRev) return;
+  if(!opts.force && incomingRev && incomingRev < _localRev) return;
   if(incomingRev) _localRev = Math.max(_localRev, incomingRev);
   if(incomingRev) _lastHydratedRev = Math.max(_lastHydratedRev, incomingRev);
   // Merge by id so an incoming remote snapshot cannot wipe locally-edited
   // or locally-added entries that haven't been pushed yet.
   if(Array.isArray(payload.leads)){
     const remote = payload.leads.map(l=>l&&l.stage==='Completed'?{...l,stage:'Closed'}:l);
-    state.leads = _mergeById(state.leads, remote);
+    state.leads = opts.force ? remote : _mergeById(state.leads, remote);
   }
-  if(Array.isArray(payload.deals)) state.deals = _mergeById(state.deals, payload.deals);
-  if(payload.cashflows && typeof payload.cashflows==='object') state.cashflows = { ...(state.cashflows||{}), ...payload.cashflows };
-  if(payload.fund && typeof payload.fund==='object') state.fund = { ...(state.fund||{}), ...payload.fund };
-  if(Array.isArray(payload.distributions)) state.distributions = _mergeById(state.distributions, payload.distributions);
-  if(Array.isArray(payload.documents)) state.documents = _mergeById(state.documents, payload.documents);
+  if(Array.isArray(payload.deals)) state.deals = opts.force ? payload.deals.slice() : _mergeById(state.deals, payload.deals);
+  if(payload.cashflows && typeof payload.cashflows==='object') state.cashflows = opts.force ? {...payload.cashflows} : { ...(state.cashflows||{}), ...payload.cashflows };
+  if(payload.fund && typeof payload.fund==='object') state.fund = opts.force ? {...payload.fund} : { ...(state.fund||{}), ...payload.fund };
+  if(Array.isArray(payload.distributions)) state.distributions = opts.force ? payload.distributions.slice() : _mergeById(state.distributions, payload.distributions);
+  if(Array.isArray(payload.documents)) _applyDocumentsFromCloud(payload.documents, opts);
   // mirror to localStorage so offline still works
   _persistLocalState();
   // After absorbing remote, push our merged view back so other clients converge
-  if(_cloudReady) cloudPushDebounced();
+  if(_cloudReady && !opts.force) cloudPushDebounced();
 }
-async function cloudHydrate(){
+async function _cloudHydrateDocuments(opts){
+  if(!_sb) return false;
+  try{
+    const { data:indexRows, error:indexError } = await _sb.from('shared_state').select('key,value,updated_at').eq('key', DOCS_INDEX_KEY);
+    if(indexError){ console.warn('[cloud] docs index', indexError); return false; }
+    const indexPayload = Array.isArray(indexRows) && indexRows[0] ? indexRows[0].value : null;
+    if(!indexPayload || !Array.isArray(indexPayload.keys) || !indexPayload.keys.length) return false;
+    const { data:docRows, error:docError } = await _sb.from('shared_state').select('key,value,updated_at').in('key', indexPayload.keys);
+    if(docError){ console.warn('[cloud] docs hydrate', docError); return false; }
+    const order = new Map(indexPayload.keys.map((key, i) => [key, i]));
+    const docs = [];
+    (docRows||[])
+      .slice()
+      .sort((a,b)=>(order.get(a.key)??0)-(order.get(b.key)??0))
+      .forEach(row=>{ if(Array.isArray(row?.value?.documents)) docs.push(...row.value.documents); });
+    if(indexPayload._rev) _localRev = Math.max(_localRev, +indexPayload._rev || 0);
+    if(indexPayload._rev) _lastHydratedRev = Math.max(_lastHydratedRev, +indexPayload._rev || 0);
+    _applyDocumentsFromCloud(docs, opts || {});
+    _persistLocalState();
+    return true;
+  } catch(e){ console.warn('[cloud] docs hydrate ex', e); return false; }
+}
+async function cloudHydrate(opts){
+  opts = opts || {};
   if(!_sb) return false;
   if(_cloudPullInFlight) return _cloudReady;
   _cloudPullInFlight = true;
@@ -956,7 +1017,8 @@ async function cloudHydrate(){
           if(revA !== revB) return revA - revB;
           return +new Date(a.updated_at||0) - +new Date(b.updated_at||0);
         })
-        .forEach(row=> row?.value && _hydrateFrom(row.value));
+        .forEach(row=> row?.value && _hydrateFrom(row.value, opts));
+      await _cloudHydrateDocuments(opts);
       _cloudReady = true;
       return true;
     }
@@ -976,6 +1038,7 @@ function cloudPushDebounced(){
 async function _cloudPushViaRest(){
   const snap = _stateSnapshot();
   const rows = SHARED_KEYS.map(key => ({ key, value: snap, updated_at: new Date().toISOString() }));
+  const docRows = _documentRowsSnapshot();
   try{
     await fetch(`${SUPABASE_URL}/rest/v1/shared_state?on_conflict=key`, {
       method:'POST',
@@ -986,7 +1049,7 @@ async function _cloudPushViaRest(){
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         'Prefer': 'resolution=merge-duplicates,return=minimal'
       },
-      body: JSON.stringify(rows)
+      body: JSON.stringify(rows.concat(docRows))
     });
   }catch(e){ console.warn('[cloud] rest push ex', e); }
 }
@@ -995,17 +1058,20 @@ async function cloudPush(opts){
   opts = opts || {};
   if(_cloudPushInFlight && !opts.flush) return;
   const snap = _stateSnapshot();
-  const hash = JSON.stringify([snap._rev, snap.leads.length, snap.deals.length, snap.documents.length, snap.distributions.length]);
-  if(hash === _lastPushedHash) return;
+  const docsHash = JSON.stringify((state.documents||[]).map(d=>[d.id,d.updatedAt||d.uploadedAt||'',d.name||'',d.size||0]));
+  const hash = JSON.stringify([snap._rev, snap.leads.length, snap.deals.length, snap._documentCount || 0, snap.distributions.length]);
+  if(hash === _lastPushedHash && docsHash === _lastPushedDocsHash) return;
   _cloudPushInFlight = true;
   _lastPushedHash = hash;
+  _lastPushedDocsHash = docsHash;
   try{
     const rows = SHARED_KEYS.map(key => ({ key, value: snap, updated_at: new Date().toISOString() }));
-    const { error } = await _sb.from('shared_state').upsert(rows);
+    const { error } = await _sb.from('shared_state').upsert(rows.concat(_documentRowsSnapshot()));
     if(error) throw error;
   } catch(e){
     console.warn('[cloud] push ex', e);
     _lastPushedHash = '';
+    _lastPushedDocsHash = '';
     clearTimeout(_cloudRetryTimer);
     _cloudRetryTimer = setTimeout(()=>cloudPush(), 1800);
     if(opts.flush) _cloudPushViaRest();
@@ -1019,6 +1085,13 @@ function cloudSubscribe(){
     .on('postgres_changes', { event:'*', schema:'public', table:'shared_state' }, (payload)=>{
       const v = payload.new && payload.new.value;
       const key = payload.new && payload.new.key;
+      if(key===DOCS_INDEX_KEY || (key||'').startsWith(DOCS_CHUNK_PREFIX)){
+        if(v && v._client === CLIENT_ID) return;
+        _cloudHydrateDocuments();
+        try{ if(document.getElementById('documents')?.classList.contains('active')) renderDocuments(); }catch(_){ }
+        try{ if(document.getElementById('leads')?.classList.contains('active')) renderLeads(); }catch(_){ }
+        return;
+      }
       if(!SHARED_KEYS.includes(key)) return;
       if(!v) return;
       if(v._client === CLIENT_ID) return; // ignore our own echo
@@ -2840,9 +2913,10 @@ function clearAllDocuments(){
 renderModeForm();
 renderLeads();
 (async () => {
-  const ok = await cloudHydrate();
+  const ok = await cloudHydrate({ force:true });
   if(ok){
     renderLeads();
+    try{ renderRejected(); renderReevalBanner(); }catch(_){ }
     if(document.getElementById('portfolio')?.classList.contains('active')) renderPortfolio();
     if(document.getElementById('documents')?.classList.contains('active')) renderDocuments();
     cloudSubscribe();
