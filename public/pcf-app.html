@@ -2846,6 +2846,7 @@ renderLeads();
     if(document.getElementById('portfolio')?.classList.contains('active')) renderPortfolio();
     if(document.getElementById('documents')?.classList.contains('active')) renderDocuments();
     cloudSubscribe();
+    startCloudResilience();
     toast('☁️ Live sync enabled');
   } else {
     toast('⚠️ Cloud sync unavailable — using local data');
