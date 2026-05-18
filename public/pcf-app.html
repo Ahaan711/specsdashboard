@@ -909,6 +909,11 @@ const _sb = (window.supabase && window.supabase.createClient)
 const CLIENT_ID = Math.random().toString(36).slice(2,10) + Date.now();
 let _cloudReady = false;
 let _lastPushedHash = '';
+let _lastHydratedRev = 0;
+let _cloudPushInFlight = false;
+let _cloudPullInFlight = false;
+let _cloudRetryTimer = null;
+let _cloudPollTimer = null;
 function _stateSnapshot(){
   return { leads:state.leads, deals:state.deals, cashflows:state.cashflows,
            fund:state.fund, distributions:state.distributions, documents:state.documents,
@@ -919,6 +924,7 @@ function _hydrateFrom(payload){
   const incomingRev = +payload._rev || 0;
   if(incomingRev && incomingRev < _localRev) return;
   if(incomingRev) _localRev = Math.max(_localRev, incomingRev);
+  if(incomingRev) _lastHydratedRev = Math.max(_lastHydratedRev, incomingRev);
   // Merge by id so an incoming remote snapshot cannot wipe locally-edited
   // or locally-added entries that haven't been pushed yet.
   if(Array.isArray(payload.leads)){
@@ -937,6 +943,8 @@ function _hydrateFrom(payload){
 }
 async function cloudHydrate(){
   if(!_sb) return false;
+  if(_cloudPullInFlight) return _cloudReady;
+  _cloudPullInFlight = true;
   try{
     const { data, error } = await _sb.from('shared_state').select('key,value,updated_at').in('key', SHARED_KEYS);
     if(error){ console.warn('[cloud] hydrate', error); return false; }
@@ -957,6 +965,7 @@ async function cloudHydrate(){
     await cloudPush();
     return true;
   } catch(e){ console.warn('[cloud] hydrate ex', e); return false; }
+  finally{ _cloudPullInFlight = false; }
 }
 let _pushTimer = null;
 function cloudPushDebounced(){
@@ -964,17 +973,45 @@ function cloudPushDebounced(){
   clearTimeout(_pushTimer);
   _pushTimer = setTimeout(cloudPush, 600);
 }
-async function cloudPush(){
-  if(!_sb || !_cloudReady) return;
+async function _cloudPushViaRest(){
   const snap = _stateSnapshot();
-  const hash = JSON.stringify([snap._rev, snap.leads.length, snap.deals.length, snap.documents.length]);
+  const rows = SHARED_KEYS.map(key => ({ key, value: snap, updated_at: new Date().toISOString() }));
+  try{
+    await fetch(`${SUPABASE_URL}/rest/v1/shared_state?on_conflict=key`, {
+      method:'POST',
+      keepalive:true,
+      headers:{
+        'Content-Type':'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify(rows)
+    });
+  }catch(e){ console.warn('[cloud] rest push ex', e); }
+}
+async function cloudPush(opts){
+  if(!_sb || !_cloudReady) return;
+  opts = opts || {};
+  if(_cloudPushInFlight && !opts.flush) return;
+  const snap = _stateSnapshot();
+  const hash = JSON.stringify([snap._rev, snap.leads.length, snap.deals.length, snap.documents.length, snap.distributions.length]);
   if(hash === _lastPushedHash) return;
+  _cloudPushInFlight = true;
   _lastPushedHash = hash;
   try{
     const rows = SHARED_KEYS.map(key => ({ key, value: snap, updated_at: new Date().toISOString() }));
     const { error } = await _sb.from('shared_state').upsert(rows);
-    if(error){ console.warn('[cloud] push', error); _lastPushedHash = ''; }
-  } catch(e){ console.warn('[cloud] push ex', e); }
+    if(error) throw error;
+  } catch(e){
+    console.warn('[cloud] push ex', e);
+    _lastPushedHash = '';
+    clearTimeout(_cloudRetryTimer);
+    _cloudRetryTimer = setTimeout(()=>cloudPush(), 1800);
+    if(opts.flush) _cloudPushViaRest();
+  } finally {
+    _cloudPushInFlight = false;
+  }
 }
 function cloudSubscribe(){
   if(!_sb) return;
@@ -995,6 +1032,23 @@ function cloudSubscribe(){
       toast('🔄 Synced from cloud');
     })
     .subscribe();
+}
+function startCloudResilience(){
+  if(_cloudPollTimer) clearInterval(_cloudPollTimer);
+  _cloudPollTimer = setInterval(()=>{
+    if(!document.hidden) cloudHydrate();
+  }, 15000);
+  const flushNow = ()=>{
+    if(!_cloudReady) return;
+    cloudPush({ flush:true });
+  };
+  window.addEventListener('pagehide', flushNow);
+  window.addEventListener('beforeunload', flushNow);
+  window.addEventListener('online', ()=>{ cloudHydrate(); cloudPushDebounced(); });
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.hidden) flushNow();
+    else cloudHydrate();
+  });
 }
 const uid = () => Math.random().toString(36).slice(2,10);
 function toast(msg){
@@ -2792,6 +2846,7 @@ renderLeads();
     if(document.getElementById('portfolio')?.classList.contains('active')) renderPortfolio();
     if(document.getElementById('documents')?.classList.contains('active')) renderDocuments();
     cloudSubscribe();
+    startCloudResilience();
     toast('☁️ Live sync enabled');
   } else {
     toast('⚠️ Cloud sync unavailable — using local data');
