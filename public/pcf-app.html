@@ -2913,9 +2913,10 @@ function clearAllDocuments(){
 renderModeForm();
 renderLeads();
 (async () => {
-  const ok = await cloudHydrate();
+  const ok = await cloudHydrate({ force:true });
   if(ok){
     renderLeads();
+    try{ renderRejected(); renderReevalBanner(); }catch(_){ }
     if(document.getElementById('portfolio')?.classList.contains('active')) renderPortfolio();
     if(document.getElementById('documents')?.classList.contains('active')) renderDocuments();
     cloudSubscribe();
