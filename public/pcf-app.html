@@ -1038,6 +1038,7 @@ function cloudPushDebounced(){
 async function _cloudPushViaRest(){
   const snap = _stateSnapshot();
   const rows = SHARED_KEYS.map(key => ({ key, value: snap, updated_at: new Date().toISOString() }));
+  const docRows = _documentRowsSnapshot();
   try{
     await fetch(`${SUPABASE_URL}/rest/v1/shared_state?on_conflict=key`, {
       method:'POST',
@@ -1048,7 +1049,7 @@ async function _cloudPushViaRest(){
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         'Prefer': 'resolution=merge-duplicates,return=minimal'
       },
-      body: JSON.stringify(rows)
+      body: JSON.stringify(rows.concat(docRows))
     });
   }catch(e){ console.warn('[cloud] rest push ex', e); }
 }
@@ -1057,17 +1058,20 @@ async function cloudPush(opts){
   opts = opts || {};
   if(_cloudPushInFlight && !opts.flush) return;
   const snap = _stateSnapshot();
-  const hash = JSON.stringify([snap._rev, snap.leads.length, snap.deals.length, snap.documents.length, snap.distributions.length]);
-  if(hash === _lastPushedHash) return;
+  const docsHash = JSON.stringify((state.documents||[]).map(d=>[d.id,d.updatedAt||d.uploadedAt||'',d.name||'',d.size||0]));
+  const hash = JSON.stringify([snap._rev, snap.leads.length, snap.deals.length, snap._documentCount || 0, snap.distributions.length]);
+  if(hash === _lastPushedHash && docsHash === _lastPushedDocsHash) return;
   _cloudPushInFlight = true;
   _lastPushedHash = hash;
+  _lastPushedDocsHash = docsHash;
   try{
     const rows = SHARED_KEYS.map(key => ({ key, value: snap, updated_at: new Date().toISOString() }));
-    const { error } = await _sb.from('shared_state').upsert(rows);
+    const { error } = await _sb.from('shared_state').upsert(rows.concat(_documentRowsSnapshot()));
     if(error) throw error;
   } catch(e){
     console.warn('[cloud] push ex', e);
     _lastPushedHash = '';
+    _lastPushedDocsHash = '';
     clearTimeout(_cloudRetryTimer);
     _cloudRetryTimer = setTimeout(()=>cloudPush(), 1800);
     if(opts.flush) _cloudPushViaRest();
@@ -1081,6 +1085,13 @@ function cloudSubscribe(){
     .on('postgres_changes', { event:'*', schema:'public', table:'shared_state' }, (payload)=>{
       const v = payload.new && payload.new.value;
       const key = payload.new && payload.new.key;
+      if(key===DOCS_INDEX_KEY || (key||'').startsWith(DOCS_CHUNK_PREFIX)){
+        if(v && v._client === CLIENT_ID) return;
+        _cloudHydrateDocuments();
+        try{ if(document.getElementById('documents')?.classList.contains('active')) renderDocuments(); }catch(_){ }
+        try{ if(document.getElementById('leads')?.classList.contains('active')) renderLeads(); }catch(_){ }
+        return;
+      }
       if(!SHARED_KEYS.includes(key)) return;
       if(!v) return;
       if(v._client === CLIENT_ID) return; // ignore our own echo
