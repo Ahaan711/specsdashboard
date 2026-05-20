@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
   Briefcase,
-  GitMerge,
+  
   Eye,
   Settings as SettingsIcon,
   Home,
