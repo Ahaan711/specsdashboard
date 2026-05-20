@@ -56,7 +56,7 @@ function PortfolioLayout() {
             return (
               <Link
                 key={item.to}
-                to={item.to}
+                to={item.to as "/portfolio"}
                 className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors"
                 style={{
                   backgroundColor: active ? "#1A1D24" : "transparent",
