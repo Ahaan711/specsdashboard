@@ -36,13 +36,22 @@ type TabKey = "overview" | "live" | "termsheet" | "predd";
 function CompanyDetail() {
   const { companyId } = Route.useParams();
   const [company, setCompany] = useState<Company | undefined>();
+  const [missing, setMissing] = useState(false);
 
   useEffect(() => {
     const c = getCompany(companyId);
-    if (!c) throw notFound();
-    setCompany(c);
+    if (!c) setMissing(true);
+    else setCompany(c);
   }, [companyId]);
 
+  if (missing) {
+    return (
+      <div className="p-8 text-sm text-white/60">
+        Company not found.{" "}
+        <Link to="/portfolio" className="text-[#C9A84C] hover:underline">Back to portfolio</Link>
+      </div>
+    );
+  }
   if (!company) return <div className="p-8 text-white/40">Loading…</div>;
 
   return (
