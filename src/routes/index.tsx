@@ -23,10 +23,10 @@ const cards = [
     subtitle: "Active companies, live data, term sheets & pre-DD notes",
   },
   {
-    to: "/pipeline",
+    to: "/portfolio-legacy",
     icon: GitMerge,
     title: "Pipeline Tracker",
-    subtitle: "New deal origination, stage tracking & deal scoring",
+    subtitle: "Open the live SpECS Fund Manager workspace",
   },
 ] as const;
 
