@@ -14,6 +14,7 @@ import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PortfolioIndexRouteImport } from './routes/portfolio.index'
 import { Route as ApiClassifySectorRouteImport } from './routes/api.classify-sector'
 
 const PortfolioLegacyRoute = PortfolioLegacyRouteImport.update({
@@ -41,6 +42,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortfolioIndexRoute = PortfolioIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PortfolioRoute,
+} as any)
 const ApiClassifySectorRoute = ApiClassifySectorRouteImport.update({
   id: '/api/classify-sector',
   path: '/api/classify-sector',
@@ -51,26 +57,28 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
   '/pipeline': typeof PipelineRoute
-  '/portfolio': typeof PortfolioRoute
+  '/portfolio': typeof PortfolioRouteWithChildren
   '/portfolio-legacy': typeof PortfolioLegacyRoute
   '/api/classify-sector': typeof ApiClassifySectorRoute
+  '/portfolio/': typeof PortfolioIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
   '/pipeline': typeof PipelineRoute
-  '/portfolio': typeof PortfolioRoute
   '/portfolio-legacy': typeof PortfolioLegacyRoute
   '/api/classify-sector': typeof ApiClassifySectorRoute
+  '/portfolio': typeof PortfolioIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRoute
   '/pipeline': typeof PipelineRoute
-  '/portfolio': typeof PortfolioRoute
+  '/portfolio': typeof PortfolioRouteWithChildren
   '/portfolio-legacy': typeof PortfolioLegacyRoute
   '/api/classify-sector': typeof ApiClassifySectorRoute
+  '/portfolio/': typeof PortfolioIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -81,14 +89,15 @@ export interface FileRouteTypes {
     | '/portfolio'
     | '/portfolio-legacy'
     | '/api/classify-sector'
+    | '/portfolio/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/app'
     | '/pipeline'
-    | '/portfolio'
     | '/portfolio-legacy'
     | '/api/classify-sector'
+    | '/portfolio'
   id:
     | '__root__'
     | '/'
@@ -97,13 +106,14 @@ export interface FileRouteTypes {
     | '/portfolio'
     | '/portfolio-legacy'
     | '/api/classify-sector'
+    | '/portfolio/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRoute
   PipelineRoute: typeof PipelineRoute
-  PortfolioRoute: typeof PortfolioRoute
+  PortfolioRoute: typeof PortfolioRouteWithChildren
   PortfolioLegacyRoute: typeof PortfolioLegacyRoute
   ApiClassifySectorRoute: typeof ApiClassifySectorRoute
 }
@@ -145,6 +155,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portfolio/': {
+      id: '/portfolio/'
+      path: '/'
+      fullPath: '/portfolio/'
+      preLoaderRoute: typeof PortfolioIndexRouteImport
+      parentRoute: typeof PortfolioRoute
+    }
     '/api/classify-sector': {
       id: '/api/classify-sector'
       path: '/api/classify-sector'
@@ -155,14 +172,35 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface PortfolioRouteChildren {
+  PortfolioIndexRoute: typeof PortfolioIndexRoute
+}
+
+const PortfolioRouteChildren: PortfolioRouteChildren = {
+  PortfolioIndexRoute: PortfolioIndexRoute,
+}
+
+const PortfolioRouteWithChildren = PortfolioRoute._addFileChildren(
+  PortfolioRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRoute,
   PipelineRoute: PipelineRoute,
-  PortfolioRoute: PortfolioRoute,
+  PortfolioRoute: PortfolioRouteWithChildren,
   PortfolioLegacyRoute: PortfolioLegacyRoute,
   ApiClassifySectorRoute: ApiClassifySectorRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
