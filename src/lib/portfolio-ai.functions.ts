@@ -119,9 +119,9 @@ export const parseDocument = createServerFn({ method: "POST" })
         .replace(/^```(?:json)?/i, "")
         .replace(/```$/, "")
         .trim();
-      let parsed: Record<string, unknown>;
+      let parsed: Record<string, never>;
       try {
-        parsed = JSON.parse(cleaned) as Record<string, unknown>;
+        parsed = JSON.parse(cleaned);
       } catch {
         return { ok: false as const, error: "Model returned non-JSON output." };
       }
