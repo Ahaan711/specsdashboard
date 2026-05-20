@@ -9,12 +9,22 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PortfolioLegacyRouteImport } from './routes/portfolio-legacy'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PortfolioIndexRouteImport } from './routes/portfolio.index'
+import { Route as PortfolioWatchlistRouteImport } from './routes/portfolio.watchlist'
+import { Route as PortfolioSettingsRouteImport } from './routes/portfolio.settings'
+import { Route as PortfolioCompanyIdRouteImport } from './routes/portfolio.$companyId'
 import { Route as ApiClassifySectorRouteImport } from './routes/api.classify-sector'
 
+const PortfolioLegacyRoute = PortfolioLegacyRouteImport.update({
+  id: '/portfolio-legacy',
+  path: '/portfolio-legacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PortfolioRoute = PortfolioRouteImport.update({
   id: '/portfolio',
   path: '/portfolio',
@@ -35,6 +45,26 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortfolioIndexRoute = PortfolioIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PortfolioRoute,
+} as any)
+const PortfolioWatchlistRoute = PortfolioWatchlistRouteImport.update({
+  id: '/watchlist',
+  path: '/watchlist',
+  getParentRoute: () => PortfolioRoute,
+} as any)
+const PortfolioSettingsRoute = PortfolioSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => PortfolioRoute,
+} as any)
+const PortfolioCompanyIdRoute = PortfolioCompanyIdRouteImport.update({
+  id: '/$companyId',
+  path: '/$companyId',
+  getParentRoute: () => PortfolioRoute,
+} as any)
 const ApiClassifySectorRoute = ApiClassifySectorRouteImport.update({
   id: '/api/classify-sector',
   path: '/api/classify-sector',
@@ -45,48 +75,94 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
   '/pipeline': typeof PipelineRoute
-  '/portfolio': typeof PortfolioRoute
+  '/portfolio': typeof PortfolioRouteWithChildren
+  '/portfolio-legacy': typeof PortfolioLegacyRoute
   '/api/classify-sector': typeof ApiClassifySectorRoute
+  '/portfolio/$companyId': typeof PortfolioCompanyIdRoute
+  '/portfolio/settings': typeof PortfolioSettingsRoute
+  '/portfolio/watchlist': typeof PortfolioWatchlistRoute
+  '/portfolio/': typeof PortfolioIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
   '/pipeline': typeof PipelineRoute
-  '/portfolio': typeof PortfolioRoute
+  '/portfolio-legacy': typeof PortfolioLegacyRoute
   '/api/classify-sector': typeof ApiClassifySectorRoute
+  '/portfolio/$companyId': typeof PortfolioCompanyIdRoute
+  '/portfolio/settings': typeof PortfolioSettingsRoute
+  '/portfolio/watchlist': typeof PortfolioWatchlistRoute
+  '/portfolio': typeof PortfolioIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRoute
   '/pipeline': typeof PipelineRoute
-  '/portfolio': typeof PortfolioRoute
+  '/portfolio': typeof PortfolioRouteWithChildren
+  '/portfolio-legacy': typeof PortfolioLegacyRoute
   '/api/classify-sector': typeof ApiClassifySectorRoute
+  '/portfolio/$companyId': typeof PortfolioCompanyIdRoute
+  '/portfolio/settings': typeof PortfolioSettingsRoute
+  '/portfolio/watchlist': typeof PortfolioWatchlistRoute
+  '/portfolio/': typeof PortfolioIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/app' | '/pipeline' | '/portfolio' | '/api/classify-sector'
+  fullPaths:
+    | '/'
+    | '/app'
+    | '/pipeline'
+    | '/portfolio'
+    | '/portfolio-legacy'
+    | '/api/classify-sector'
+    | '/portfolio/$companyId'
+    | '/portfolio/settings'
+    | '/portfolio/watchlist'
+    | '/portfolio/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/app' | '/pipeline' | '/portfolio' | '/api/classify-sector'
+  to:
+    | '/'
+    | '/app'
+    | '/pipeline'
+    | '/portfolio-legacy'
+    | '/api/classify-sector'
+    | '/portfolio/$companyId'
+    | '/portfolio/settings'
+    | '/portfolio/watchlist'
+    | '/portfolio'
   id:
     | '__root__'
     | '/'
     | '/app'
     | '/pipeline'
     | '/portfolio'
+    | '/portfolio-legacy'
     | '/api/classify-sector'
+    | '/portfolio/$companyId'
+    | '/portfolio/settings'
+    | '/portfolio/watchlist'
+    | '/portfolio/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRoute
   PipelineRoute: typeof PipelineRoute
-  PortfolioRoute: typeof PortfolioRoute
+  PortfolioRoute: typeof PortfolioRouteWithChildren
+  PortfolioLegacyRoute: typeof PortfolioLegacyRoute
   ApiClassifySectorRoute: typeof ApiClassifySectorRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/portfolio-legacy': {
+      id: '/portfolio-legacy'
+      path: '/portfolio-legacy'
+      fullPath: '/portfolio-legacy'
+      preLoaderRoute: typeof PortfolioLegacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/portfolio': {
       id: '/portfolio'
       path: '/portfolio'
@@ -115,6 +191,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portfolio/': {
+      id: '/portfolio/'
+      path: '/'
+      fullPath: '/portfolio/'
+      preLoaderRoute: typeof PortfolioIndexRouteImport
+      parentRoute: typeof PortfolioRoute
+    }
+    '/portfolio/watchlist': {
+      id: '/portfolio/watchlist'
+      path: '/watchlist'
+      fullPath: '/portfolio/watchlist'
+      preLoaderRoute: typeof PortfolioWatchlistRouteImport
+      parentRoute: typeof PortfolioRoute
+    }
+    '/portfolio/settings': {
+      id: '/portfolio/settings'
+      path: '/settings'
+      fullPath: '/portfolio/settings'
+      preLoaderRoute: typeof PortfolioSettingsRouteImport
+      parentRoute: typeof PortfolioRoute
+    }
+    '/portfolio/$companyId': {
+      id: '/portfolio/$companyId'
+      path: '/$companyId'
+      fullPath: '/portfolio/$companyId'
+      preLoaderRoute: typeof PortfolioCompanyIdRouteImport
+      parentRoute: typeof PortfolioRoute
+    }
     '/api/classify-sector': {
       id: '/api/classify-sector'
       path: '/api/classify-sector'
@@ -125,11 +229,30 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface PortfolioRouteChildren {
+  PortfolioCompanyIdRoute: typeof PortfolioCompanyIdRoute
+  PortfolioSettingsRoute: typeof PortfolioSettingsRoute
+  PortfolioWatchlistRoute: typeof PortfolioWatchlistRoute
+  PortfolioIndexRoute: typeof PortfolioIndexRoute
+}
+
+const PortfolioRouteChildren: PortfolioRouteChildren = {
+  PortfolioCompanyIdRoute: PortfolioCompanyIdRoute,
+  PortfolioSettingsRoute: PortfolioSettingsRoute,
+  PortfolioWatchlistRoute: PortfolioWatchlistRoute,
+  PortfolioIndexRoute: PortfolioIndexRoute,
+}
+
+const PortfolioRouteWithChildren = PortfolioRoute._addFileChildren(
+  PortfolioRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRoute,
   PipelineRoute: PipelineRoute,
-  PortfolioRoute: PortfolioRoute,
+  PortfolioRoute: PortfolioRouteWithChildren,
+  PortfolioLegacyRoute: PortfolioLegacyRoute,
   ApiClassifySectorRoute: ApiClassifySectorRoute,
 }
 export const routeTree = rootRouteImport
