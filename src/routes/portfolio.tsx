@@ -29,7 +29,6 @@ type NavItem = { to: string; label: string; icon: typeof Briefcase; exact?: bool
 const NAV: NavItem[] = [
   { to: "/portfolio", label: "Portfolio", icon: Briefcase, exact: true },
   { to: "/portfolio/watchlist", label: "Watchlist", icon: Eye },
-  { to: "/pipeline", label: "Pipeline", icon: GitMerge },
   { to: "/portfolio/settings", label: "Settings", icon: SettingsIcon },
   { to: "/portfolio-legacy", label: "Legacy App", icon: FileText },
 ];
