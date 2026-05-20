@@ -48,7 +48,7 @@ function CompanyDetail() {
     return (
       <div className="p-8 text-sm text-white/60">
         Company not found.{" "}
-        <Link to="/portfolio" className="text-[#C9A84C] hover:underline">Back to portfolio</Link>
+        <Link to="/portfolio" className="text-[#FF7553] hover:underline">Back to portfolio</Link>
       </div>
     );
   }
@@ -58,7 +58,7 @@ function CompanyDetail() {
     <div className="p-6">
       <Link
         to="/portfolio"
-        className="mb-4 inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-[#C9A84C]"
+        className="mb-4 inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-[#FF7553]"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Back to Portfolio
       </Link>
@@ -98,7 +98,7 @@ function CompanyDetail() {
                 href={company.website}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 hover:text-[#C9A84C]"
+                className="inline-flex items-center gap-1 hover:text-[#FF7553]"
               >
                 Website <ExternalLink className="h-3 w-3" />
               </a>
@@ -107,7 +107,7 @@ function CompanyDetail() {
         </div>
         <div className="text-right">
           <div className="text-[11px] uppercase tracking-wider text-white/40">Our Exposure</div>
-          <div className="mt-1 text-2xl font-semibold text-[#C9A84C]">{formatCr(company.exposureCr)}</div>
+          <div className="mt-1 text-2xl font-semibold text-[#FF7553]">{formatCr(company.exposureCr)}</div>
           <div className="mt-0.5 text-xs text-white/40">
             {company.investmentType} · {company.tenor || "—"}
           </div>
@@ -128,7 +128,7 @@ function CompanyDetail() {
       )}
 
       <Tabs defaultValue={"overview" as TabKey} className="w-full">
-        <TabsList className="border bg-[#111318]" style={{ borderColor: "#1E2229" }}>
+        <TabsList className="border bg-[#15253F]" style={{ borderColor: "#1A2B47" }}>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="live">Live Data</TabsTrigger>
           <TabsTrigger value="termsheet">Term Sheet</TabsTrigger>
@@ -154,7 +154,7 @@ function CompanyDetail() {
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border p-5" style={{ borderColor: "#1E2229", backgroundColor: "#111318" }}>
+    <div className="rounded-lg border p-5" style={{ borderColor: "#1A2B47", backgroundColor: "#15253F" }}>
       <div className="mb-3 text-[11px] uppercase tracking-wider text-white/40">{title}</div>
       {children}
     </div>
@@ -210,10 +210,10 @@ function OverviewTab({ company }: { company: Company }) {
                   <span className="capitalize text-white/60">{k}</span>
                   <span className="text-white/90">{v}%</span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-[#1E2229]">
+                <div className="h-1.5 overflow-hidden rounded-full bg-[#1A2B47]">
                   <div
                     className="h-full rounded-full"
-                    style={{ width: `${v}%`, backgroundColor: "#C9A84C" }}
+                    style={{ width: `${v}%`, backgroundColor: "#FF7553" }}
                   />
                 </div>
               </div>
@@ -251,7 +251,7 @@ function LiveTab({ company }: { company: Company }) {
         <Card title="Key Ratios">
           <div className="grid grid-cols-2 gap-3">
             {live.ratios?.map((r) => (
-              <div key={r.label} className="flex justify-between border-b pb-1.5 text-sm" style={{ borderColor: "#1E2229" }}>
+              <div key={r.label} className="flex justify-between border-b pb-1.5 text-sm" style={{ borderColor: "#1A2B47" }}>
                 <span className="text-white/60">{r.label}</span>
                 <span className="font-mono text-white/90">{r.value}</span>
               </div>
@@ -264,7 +264,7 @@ function LiveTab({ company }: { company: Company }) {
               <div>
                 <div className="text-[11px] uppercase tracking-wider text-white/40">Credit Rating</div>
                 <div className="mt-1 flex items-baseline gap-2">
-                  <span className="text-2xl font-semibold text-[#C9A84C]">{live.rating.rating}</span>
+                  <span className="text-2xl font-semibold text-[#FF7553]">{live.rating.rating}</span>
                   <span className="text-xs text-white/50">{live.rating.agency} · {live.rating.outlook}</span>
                 </div>
               </div>
@@ -485,7 +485,7 @@ function DocumentTab<T>({
             }}
           />
           <span
-            className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md bg-[#C9A84C] px-3 text-sm font-medium text-[#0A0C10] hover:bg-[#D9B85C]"
+            className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md bg-[#FF7553] px-3 text-sm font-medium text-[#0F1B2E] hover:bg-[#FF8E72]"
             style={{ opacity: loading ? 0.6 : 1 }}
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -498,7 +498,7 @@ function DocumentTab<T>({
       ) : (
         <div
           className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-sm text-white/40"
-          style={{ borderColor: "#1E2229" }}
+          style={{ borderColor: "#1A2B47" }}
         >
           <FileText className="mb-3 h-8 w-8 text-white/20" />
           {emptyHint}

@@ -18,12 +18,12 @@ function SettingsPage() {
       <div className="mt-6 max-w-2xl space-y-4">
         <Card title="Data">
           <div className="text-sm text-white/70">
-            Currently storing <span className="font-mono text-[#C9A84C]">{count}</span> companies in browser localStorage.
+            Currently storing <span className="font-mono text-[#FF7553]">{count}</span> companies in browser localStorage.
           </div>
           <div className="mt-3 flex gap-2">
             <Button
               variant="outline"
-              className="border-[#1E2229] bg-transparent text-white hover:bg-[#1A1D24]"
+              className="border-[#1A2B47] bg-transparent text-white hover:bg-[#1C3151]"
               onClick={() => {
                 resetSeed();
                 setCount(loadCompanies().length);
@@ -55,7 +55,7 @@ function SettingsPage() {
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border p-5" style={{ borderColor: "#1E2229", backgroundColor: "#111318" }}>
+    <div className="rounded-lg border p-5" style={{ borderColor: "#1A2B47", backgroundColor: "#15253F" }}>
       <div className="mb-3 text-[11px] uppercase tracking-wider text-white/40">{title}</div>
       {children}
     </div>

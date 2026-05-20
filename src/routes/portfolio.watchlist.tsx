@@ -20,7 +20,7 @@ function WatchlistPage() {
 
       <div className="mt-6 space-y-3">
         {items.length === 0 && (
-          <div className="rounded-lg border p-10 text-center text-sm text-white/40" style={{ borderColor: "#1E2229", backgroundColor: "#111318" }}>
+          <div className="rounded-lg border p-10 text-center text-sm text-white/40" style={{ borderColor: "#1A2B47", backgroundColor: "#15253F" }}>
             No companies on watch.
           </div>
         )}
@@ -30,7 +30,7 @@ function WatchlistPage() {
             to="/portfolio/$companyId"
             params={{ companyId: c.id }}
             className="block rounded-lg border p-4 transition-colors hover:border-[#EF444460]"
-            style={{ borderColor: "#1E2229", backgroundColor: "#111318" }}
+            style={{ borderColor: "#1A2B47", backgroundColor: "#15253F" }}
           >
             <div className="flex items-start justify-between">
               <div className="flex-1">

@@ -51,7 +51,7 @@ function PortfolioDashboard() {
           </p>
         </div>
         <Button
-          className="h-9 gap-1.5 bg-[#C9A84C] text-[#0A0C10] hover:bg-[#D9B85C]"
+          className="h-9 gap-1.5 bg-[#FF7553] text-[#0F1B2E] hover:bg-[#FF8E72]"
           disabled
           title="Add company flow — coming next"
         >
@@ -68,10 +68,10 @@ function PortfolioDashboard() {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border" style={{ borderColor: "#1E2229", backgroundColor: "#111318" }}>
+      <div className="overflow-hidden rounded-lg border" style={{ borderColor: "#1A2B47", backgroundColor: "#15253F" }}>
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wider text-white/40" style={{ borderBottom: "1px solid #1E2229" }}>
+            <tr className="text-left text-[11px] uppercase tracking-wider text-white/40" style={{ borderBottom: "1px solid #1A2B47" }}>
               <th className="px-4 py-3 font-medium">Company</th>
               <th className="px-4 py-3 font-medium">Sector</th>
               <th className="px-4 py-3 font-medium">Instrument</th>
@@ -86,11 +86,11 @@ function PortfolioDashboard() {
             {filtered.map((c) => (
               <tr
                 key={c.id}
-                className="group transition-colors hover:bg-[#1A1D24]"
-                style={{ borderBottom: "1px solid #1A1D22" }}
+                className="group transition-colors hover:bg-[#1C3151]"
+                style={{ borderBottom: "1px solid #1A2B47" }}
               >
                 <td className="px-4 py-3.5">
-                  <Link to="/portfolio/$companyId" params={{ companyId: c.id }} className="font-medium text-white hover:text-[#C9A84C]">
+                  <Link to="/portfolio/$companyId" params={{ companyId: c.id }} className="font-medium text-white hover:text-[#FF7553]">
                     {c.name}
                   </Link>
                   {c.status === "Watch" && (
@@ -123,7 +123,7 @@ function PortfolioDashboard() {
                 </td>
                 <td className="px-4 py-3.5 text-right">
                   <Link to="/portfolio/$companyId" params={{ companyId: c.id }}>
-                    <ChevronRight className="h-4 w-4 text-white/30 transition-colors group-hover:text-[#C9A84C]" />
+                    <ChevronRight className="h-4 w-4 text-white/30 transition-colors group-hover:text-[#FF7553]" />
                   </Link>
                 </td>
               </tr>
@@ -146,7 +146,7 @@ function Kpi({ label, value, accent }: { label: string; value: string; accent?: 
   return (
     <div
       className="rounded-lg border p-4"
-      style={{ backgroundColor: "#111318", borderColor: "#1E2229" }}
+      style={{ backgroundColor: "#15253F", borderColor: "#1A2B47" }}
     >
       <div className="text-[11px] uppercase tracking-wider text-white/40">{label}</div>
       <div className="mt-1.5 text-xl font-semibold" style={{ color: accent || "#FFFFFF" }}>
