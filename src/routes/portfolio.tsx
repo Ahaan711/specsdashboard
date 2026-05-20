@@ -25,13 +25,14 @@ export const Route = createFileRoute("/portfolio")({
   component: PortfolioLayout,
 });
 
-const NAV = [
+type NavItem = { to: string; label: string; icon: typeof Briefcase; exact?: boolean };
+const NAV: NavItem[] = [
   { to: "/portfolio", label: "Portfolio", icon: Briefcase, exact: true },
   { to: "/portfolio/watchlist", label: "Watchlist", icon: Eye },
   { to: "/pipeline", label: "Pipeline", icon: GitMerge },
   { to: "/portfolio/settings", label: "Settings", icon: SettingsIcon },
   { to: "/portfolio-legacy", label: "Legacy App", icon: FileText },
-] as const;
+];
 
 function PortfolioLayout() {
   const path = useRouterState({ select: (s) => s.location.pathname });
