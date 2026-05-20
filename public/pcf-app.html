@@ -841,6 +841,32 @@
 
 <script>
 /* =========================================================
+   INBUILT SEED DATA — loads shared dataset for everyone
+   ========================================================= */
+(function seedDefaultData(){
+  try {
+    var SEED_VERSION = 'seed-2026-05-20-v1';
+    var SEED_FLAG = 'pcf_seed_version';
+    if (localStorage.getItem(SEED_FLAG) === SEED_VERSION) return;
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/seed-data.json', false); // sync, one-time bootstrap
+    xhr.send(null);
+    if (xhr.status !== 200) { console.warn('[seed] fetch failed', xhr.status); return; }
+    var seed = JSON.parse(xhr.responseText);
+    Object.keys(seed).forEach(function(k){
+      var v = seed[k];
+      localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v));
+    });
+    localStorage.setItem(SEED_FLAG, SEED_VERSION);
+    console.log('[seed] loaded inbuilt dataset', SEED_VERSION);
+  } catch(err) {
+    console.warn('[seed] failed', err);
+  }
+})();
+</script>
+
+<script>
+/* =========================================================
    STATE & PERSISTENCE
    ========================================================= */
 const KEYS = { leads:'pcf_leads', deals:'pcf_deals', cashflows:'pcf_cashflows', fund:'pcf_fund', distributions:'pcf_distributions', documents:'pcf_documents', rev:'pcf_state_rev' };
