@@ -9,10 +9,22 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PortfolioRouteImport } from './routes/portfolio'
+import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiClassifySectorRouteImport } from './routes/api.classify-sector'
 
+const PortfolioRoute = PortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PipelineRoute = PipelineRouteImport.update({
+  id: '/pipeline',
+  path: '/pipeline',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppRoute = AppRouteImport.update({
   id: '/app',
   path: '/app',
@@ -32,35 +44,63 @@ const ApiClassifySectorRoute = ApiClassifySectorRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
+  '/pipeline': typeof PipelineRoute
+  '/portfolio': typeof PortfolioRoute
   '/api/classify-sector': typeof ApiClassifySectorRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
+  '/pipeline': typeof PipelineRoute
+  '/portfolio': typeof PortfolioRoute
   '/api/classify-sector': typeof ApiClassifySectorRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRoute
+  '/pipeline': typeof PipelineRoute
+  '/portfolio': typeof PortfolioRoute
   '/api/classify-sector': typeof ApiClassifySectorRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/app' | '/api/classify-sector'
+  fullPaths: '/' | '/app' | '/pipeline' | '/portfolio' | '/api/classify-sector'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/app' | '/api/classify-sector'
-  id: '__root__' | '/' | '/app' | '/api/classify-sector'
+  to: '/' | '/app' | '/pipeline' | '/portfolio' | '/api/classify-sector'
+  id:
+    | '__root__'
+    | '/'
+    | '/app'
+    | '/pipeline'
+    | '/portfolio'
+    | '/api/classify-sector'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRoute
+  PipelineRoute: typeof PipelineRoute
+  PortfolioRoute: typeof PortfolioRoute
   ApiClassifySectorRoute: typeof ApiClassifySectorRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/portfolio': {
+      id: '/portfolio'
+      path: '/portfolio'
+      fullPath: '/portfolio'
+      preLoaderRoute: typeof PortfolioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pipeline': {
+      id: '/pipeline'
+      path: '/pipeline'
+      fullPath: '/pipeline'
+      preLoaderRoute: typeof PipelineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app': {
       id: '/app'
       path: '/app'
@@ -88,17 +128,10 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRoute,
+  PipelineRoute: PipelineRoute,
+  PortfolioRoute: PortfolioRoute,
   ApiClassifySectorRoute: ApiClassifySectorRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
