@@ -38,14 +38,14 @@ function PortfolioLayout() {
   const [query, setQuery] = useState("");
 
   return (
-    <div className="flex h-screen w-full" style={{ backgroundColor: "#0A0C10", color: "#E5E7EB" }}>
+    <div className="flex h-screen w-full" style={{ backgroundColor: "#0F1B2E", color: "#E5E7EB" }}>
       {/* Sidebar */}
       <aside
         className="flex w-56 shrink-0 flex-col"
-        style={{ backgroundColor: "#0D0F14", borderRight: "1px solid #1E2229" }}
+        style={{ backgroundColor: "#0B1422", borderRight: "1px solid #1A2B47" }}
       >
-        <Link to="/" className="flex h-14 items-center gap-2 border-b px-4" style={{ borderColor: "#1E2229" }}>
-          <Home className="h-4 w-4" style={{ color: "#C9A84C" }} />
+        <Link to="/" className="flex h-14 items-center gap-2 border-b px-4" style={{ borderColor: "#1A2B47" }}>
+          <Home className="h-4 w-4" style={{ color: "#FF7553" }} />
           <span className="text-sm font-medium tracking-wide">PortfolioOS</span>
         </Link>
         <nav className="flex flex-1 flex-col gap-0.5 p-2">
@@ -58,8 +58,8 @@ function PortfolioLayout() {
                 to={item.to as "/portfolio"}
                 className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors"
                 style={{
-                  backgroundColor: active ? "#1A1D24" : "transparent",
-                  color: active ? "#C9A84C" : "#9CA3AF",
+                  backgroundColor: active ? "#1C3151" : "transparent",
+                  color: active ? "#FF7553" : "#9CA3AF",
                 }}
               >
                 <Icon className="h-4 w-4" />
@@ -68,7 +68,7 @@ function PortfolioLayout() {
             );
           })}
         </nav>
-        <div className="border-t p-3 text-[10px] uppercase tracking-wider text-white/30" style={{ borderColor: "#1E2229" }}>
+        <div className="border-t p-3 text-[10px] uppercase tracking-wider text-white/30" style={{ borderColor: "#1A2B47" }}>
           SpECS Fund · Internal
         </div>
       </aside>
@@ -77,7 +77,7 @@ function PortfolioLayout() {
       <div className="flex flex-1 flex-col overflow-hidden">
         <header
           className="flex h-14 shrink-0 items-center gap-3 px-5"
-          style={{ borderBottom: "1px solid #1E2229", backgroundColor: "#0A0C10" }}
+          style={{ borderBottom: "1px solid #1A2B47", backgroundColor: "#0F1B2E" }}
         >
           <div className="relative flex-1 max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/40" />
@@ -88,7 +88,7 @@ function PortfolioLayout() {
                 window.dispatchEvent(new CustomEvent("portfolio:search", { detail: e.target.value }));
               }}
               placeholder="Search companies, sectors…"
-              className="h-9 border-0 bg-[#111318] pl-9 text-sm text-white placeholder:text-white/30 focus-visible:ring-1 focus-visible:ring-[#C9A84C]/40"
+              className="h-9 border-0 bg-[#15253F] pl-9 text-sm text-white placeholder:text-white/30 focus-visible:ring-1 focus-visible:ring-[#FF7553]/40"
             />
           </div>
         </header>
