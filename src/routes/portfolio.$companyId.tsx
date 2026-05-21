@@ -299,55 +299,616 @@ function LiveTab({ company }: { company: Company }) {
   );
 }
 
-function TermSheetTab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
-  const ts = company.termSheet;
+// =================== Watchlist suggestion banner ===================
+
+function WatchlistSuggestionBanner({
+  company,
+  onUpdate,
+}: {
+  company: Company;
+  onUpdate: (c: Company) => void;
+}) {
+  const history = company.termSheet?.misHistory || [];
+  const latest = history.length ? history[history.length - 1] : undefined;
+  if (!latest || !latest.breachDetected || latest.watchlistDismissed) return null;
+  if (company.status === "Watch") return null;
+
+  const accept = () => {
+    const reason =
+      latest.suggestedWatchReason ||
+      latest.aiSummary ||
+      "AI flagged potential covenant/security/escrow breach in latest MIS.";
+    const newHist = history.map((h) =>
+      h.id === latest.id ? { ...h, watchlistDismissed: true } : h,
+    );
+    const updated = updateCompany(company.id, {
+      status: "Watch",
+      watchReason: reason,
+      termSheet: { ...(company.termSheet || {}), misHistory: newHist },
+    });
+    if (updated) {
+      onUpdate(updated);
+      toast.success("Company added to watchlist.");
+    }
+  };
+
+  const dismiss = () => {
+    const newHist = history.map((h) =>
+      h.id === latest.id ? { ...h, watchlistDismissed: true } : h,
+    );
+    const updated = updateCompany(company.id, {
+      termSheet: { ...(company.termSheet || {}), misHistory: newHist },
+    });
+    if (updated) onUpdate(updated);
+  };
+
   return (
-    <DocumentTab
-      mode="termsheet"
-      company={company}
-      onUpdate={onUpdate}
-      emptyHint="Upload Term Sheet PDF to auto-extract issuer, coupon, covenants, risks."
-      render={(data: typeof ts) =>
-        data && (
-          <div className="grid grid-cols-2 gap-4">
-            <Card title="Key Terms">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Issuer" value={data.issuer} />
-                <Field label="Instrument" value={data.instrument} />
-                <Field label="Issue Size" value={data.issueSize} />
-                <Field label="Coupon" value={data.coupon} />
-                <Field label="Tenor" value={data.tenor} />
-                <Field label="Closing" value={data.closingDate} />
-              </div>
-            </Card>
-            <Card title="Security & Structure">
-              <div className="space-y-3">
-                <Field label="Security" value={data.security} />
-                <Field label="Repayment" value={data.repayment} />
-                <Field label="Put / Call" value={data.putCall} />
-                <Field label="Conditions Precedent" value={data.conditionsPrecedent} />
-              </div>
-            </Card>
-            <Card title="Covenants">
-              <ul className="list-inside list-disc space-y-1 text-sm text-white/80">
-                {(data.covenants || []).map((c, i) => <li key={i}>{c}</li>)}
-                {(data.covenants || []).length === 0 && <li className="list-none text-white/40">None extracted.</li>}
-              </ul>
-            </Card>
-            <Card title="Key Risks (AI)">
-              <ul className="space-y-1.5 text-sm">
-                {(data.risks || []).map((r, i) => (
-                  <li key={i} className="flex gap-2"><AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#EF4444]" /><span className="text-white/80">{r}</span></li>
-                ))}
-                {(data.risks || []).length === 0 && <div className="text-white/40">No risks flagged.</div>}
-              </ul>
-            </Card>
-          </div>
-        )
+    <div
+      className="mb-6 flex items-start gap-3 rounded-md border p-3 text-sm"
+      style={{ borderColor: "#F59E0B60", backgroundColor: "#F59E0B14", color: "#FCD34D" }}
+    >
+      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+      <div className="flex-1">
+        <div className="font-medium">AI detected possible breach in latest MIS</div>
+        <div className="mt-0.5 text-xs opacity-90">
+          {latest.aiSummary || latest.suggestedWatchReason || "Review compliance findings below."}
+        </div>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        <button
+          onClick={accept}
+          className="rounded-md bg-[#F59E0B] px-2.5 py-1 text-xs font-medium text-[#0F1B2E] hover:bg-[#FBBF24]"
+        >
+          Add to Watchlist
+        </button>
+        <button
+          onClick={dismiss}
+          className="rounded-md border px-2.5 py-1 text-xs text-white/70 hover:bg-white/5"
+          style={{ borderColor: "#F59E0B60" }}
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// =================== Term Sheet (split into Covenants / Security / Escrow + MIS) ===================
+
+function statusIcon(s: ComplianceFinding["status"]) {
+  if (s === "pass") return <CheckCircle className="h-3.5 w-3.5 text-[#22C55E]" />;
+  if (s === "breach") return <XCircle className="h-3.5 w-3.5 text-[#EF4444]" />;
+  return <MinusCircle className="h-3.5 w-3.5 text-white/30" />;
+}
+
+function statusPill(s: ComplianceFinding["status"]) {
+  const map = {
+    pass: { bg: "#22C55E20", c: "#22C55E", label: "Compliant" },
+    breach: { bg: "#EF444420", c: "#EF4444", label: "Breach" },
+    unknown: { bg: "#64748B20", c: "#94A3B8", label: "Unknown" },
+  } as const;
+  const v = map[s];
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+      style={{ backgroundColor: v.bg, color: v.c }}
+    >
+      {v.label}
+    </span>
+  );
+}
+
+function findingByKey(latest: MISEntry | undefined, key: string) {
+  return latest?.findings?.find((f) => f.key === key);
+}
+
+function TermSheetTab({
+  company,
+  onUpdate,
+}: {
+  company: Company;
+  onUpdate: (c: Company) => void;
+}) {
+  const ts = company.termSheet;
+  const parseFn = useServerFn(parseDocument);
+  const [loadingTs, setLoadingTs] = useState(false);
+
+  const handleTermSheet = async (file: File) => {
+    setLoadingTs(true);
+    try {
+      toast.info(`Extracting text from ${file.name}…`);
+      const text = await extractPdfText(file);
+      if (text.length < 30) {
+        toast.error("Could not extract text from PDF (might be scanned).");
+        return;
       }
-      currentData={ts}
-      patchKey="termSheet"
-    />
+      toast.info("Parsing with AI…");
+      const res = await parseFn({ data: { text, mode: "termsheet" } });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      const parsed = res.data as TermSheetData;
+      // Preserve existing MIS history when re-uploading term sheet
+      const merged: TermSheetData = {
+        ...parsed,
+        misHistory: ts?.misHistory || [],
+      };
+      const updated = updateCompany(company.id, { termSheet: merged });
+      if (updated) {
+        onUpdate(updated);
+        toast.success("Term sheet parsed and saved.");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoadingTs(false);
+    }
+  };
+
+  if (!ts) {
+    return (
+      <div>
+        <div className="mb-4 flex items-center justify-between">
+          <div className="text-xs text-white/50">
+            Upload Term Sheet PDF to auto-extract covenants, security & escrow waterfall.
+          </div>
+          <UploadButton loading={loadingTs} onPick={handleTermSheet} label="Upload Term Sheet" />
+        </div>
+        <div
+          className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-sm text-white/40"
+          style={{ borderColor: "#1A2B47" }}
+        >
+          <FileText className="mb-3 h-8 w-8 text-white/20" />
+          No term sheet uploaded yet.
+        </div>
+      </div>
+    );
+  }
+
+  const covenants = normalizeCovenants(ts.covenants);
+  const security = ts.securityDetail || {};
+  const escrow = ts.escrow || {};
+  const history = ts.misHistory || [];
+  const latest = history.length ? history[history.length - 1] : undefined;
+
+  return (
+    <div className="space-y-6">
+      {/* Top bar: key terms summary + re-upload */}
+      <div
+        className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border p-4"
+        style={{ borderColor: "#1A2B47", backgroundColor: "#15253F" }}
+      >
+        <SummaryBit label="Issuer" value={ts.issuer} />
+        <SummaryBit label="Instrument" value={ts.instrument} />
+        <SummaryBit label="Issue Size" value={ts.issueSize} />
+        <SummaryBit label="Coupon" value={ts.coupon} />
+        <SummaryBit label="Tenor" value={ts.tenor} />
+        <SummaryBit label="Closing" value={ts.closingDate} />
+        <div className="ml-auto">
+          <UploadButton loading={loadingTs} onPick={handleTermSheet} label="Re-upload Term Sheet" small />
+        </div>
+      </div>
+
+      <Tabs defaultValue="covenants" className="w-full">
+        <TabsList className="border bg-[#15253F]" style={{ borderColor: "#1A2B47" }}>
+          <TabsTrigger value="covenants">Covenants</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="escrow">Escrow Flow</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="covenants" className="mt-4">
+          <CovenantsSection covenants={covenants} latest={latest} />
+        </TabsContent>
+        <TabsContent value="security" className="mt-4">
+          <SecuritySection security={security} latest={latest} />
+        </TabsContent>
+        <TabsContent value="escrow" className="mt-4">
+          <EscrowSection escrow={escrow} latest={latest} />
+        </TabsContent>
+      </Tabs>
+
+      <MISPanel company={company} onUpdate={onUpdate} />
+    </div>
+  );
+}
+
+function SummaryBit({ label, value }: { label: string; value?: string }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-white/40">{label}</div>
+      <div className="text-sm text-white/90">{value || "—"}</div>
+    </div>
+  );
+}
+
+function UploadButton({
+  loading,
+  onPick,
+  label,
+  small,
+}: {
+  loading: boolean;
+  onPick: (f: File) => void;
+  label: string;
+  small?: boolean;
+}) {
+  return (
+    <label>
+      <input
+        type="file"
+        accept="application/pdf"
+        className="hidden"
+        disabled={loading}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onPick(f);
+          e.target.value = "";
+        }}
+      />
+      <span
+        className={`inline-flex cursor-pointer items-center gap-2 rounded-md bg-[#FF7553] font-medium text-[#0F1B2E] hover:bg-[#FF8E72] ${
+          small ? "h-8 px-2.5 text-xs" : "h-9 px-3 text-sm"
+        }`}
+        style={{ opacity: loading ? 0.6 : 1 }}
+      >
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+        {label}
+      </span>
+    </label>
+  );
+}
+
+function CovenantsSection({
+  covenants,
+  latest,
+}: {
+  covenants: ReturnType<typeof normalizeCovenants>;
+  latest?: MISEntry;
+}) {
+  if (covenants.length === 0) {
+    return (
+      <Card title="Covenants">
+        <div className="text-sm text-white/40">None extracted.</div>
+      </Card>
+    );
+  }
+  return (
+    <Card title="Covenants">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-wider text-white/40">
+              <th className="py-2 pr-3">Type</th>
+              <th className="py-2 pr-3">Covenant</th>
+              <th className="py-2 pr-3">Threshold</th>
+              <th className="py-2 pr-3">Latest MIS</th>
+              <th className="py-2">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {covenants.map((c) => {
+              const f = findingByKey(latest, c.id);
+              return (
+                <tr key={c.id} className="border-t" style={{ borderColor: "#1A2B47" }}>
+                  <td className="py-2 pr-3 text-xs uppercase text-white/50">{c.type || "—"}</td>
+                  <td className="py-2 pr-3 text-white/85">{c.text}</td>
+                  <td className="py-2 pr-3 font-mono text-xs text-white/70">{c.threshold || "—"}</td>
+                  <td className="py-2 pr-3 font-mono text-xs text-white/70">
+                    {f?.actualValue || (f?.note ?? "—")}
+                  </td>
+                  <td className="py-2">{f ? statusPill(f.status) : statusPill("unknown")}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function SecuritySection({
+  security,
+  latest,
+}: {
+  security: NonNullable<TermSheetData["securityDetail"]>;
+  latest?: MISEntry;
+}) {
+  const fields: { key: keyof typeof security; label: string }[] = [
+    { key: "collateral", label: "Collateral" },
+    { key: "charge", label: "Charge" },
+    { key: "coverage", label: "Asset Cover" },
+    { key: "guarantors", label: "Guarantors" },
+    { key: "valuation", label: "Valuation" },
+    { key: "perfectionStatus", label: "Perfection Status" },
+  ];
+
+  return (
+    <Card title="Security Structure">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+        {fields.map((f) => {
+          const finding = findingByKey(latest, `security.${f.key}`);
+          return (
+            <div key={f.key}>
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] uppercase tracking-wider text-white/40">{f.label}</div>
+                {finding && statusPill(finding.status)}
+              </div>
+              <div className="mt-0.5 text-sm text-white/90">{security[f.key] || "—"}</div>
+              {finding?.note && (
+                <div className="mt-1 text-xs text-white/50">MIS: {finding.note}</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function EscrowSection({
+  escrow,
+  latest,
+}: {
+  escrow: NonNullable<TermSheetData["escrow"]>;
+  latest?: MISEntry;
+}) {
+  const waterfall = escrow.waterfall && escrow.waterfall.length > 0
+    ? [...escrow.waterfall].sort((a, b) => a.step - b.step)
+    : [];
+
+  return (
+    <div className="grid grid-cols-3 gap-4">
+      <div className="col-span-1 space-y-4">
+        <Card title="Escrow Account">
+          <Field label="Bank" value={escrow.bank} />
+          <div className="h-3" />
+          <Field label="Account" value={escrow.account} />
+          <div className="h-3" />
+          <Field label="Trigger Events" value={escrow.triggerEvents} />
+        </Card>
+      </div>
+      <div className="col-span-2">
+        <Card title="Cash-Flow Waterfall">
+          {waterfall.length === 0 ? (
+            <div className="text-sm text-white/40">No waterfall extracted.</div>
+          ) : (
+            <div className="flex flex-col items-stretch gap-2">
+              {waterfall.map((s, i) => {
+                const finding = findingByKey(latest, `escrow.step.${s.step}`);
+                const breach = finding?.status === "breach";
+                return (
+                  <div key={s.step}>
+                    <div
+                      className="flex items-start gap-3 rounded-md border p-3"
+                      style={{
+                        borderColor: breach ? "#EF444460" : "#1A2B47",
+                        backgroundColor: breach ? "#EF444410" : "#1C3151",
+                      }}
+                    >
+                      <div
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+                        style={{
+                          backgroundColor: breach ? "#EF444430" : "#FF755330",
+                          color: breach ? "#EF4444" : "#FF7553",
+                        }}
+                      >
+                        {s.step}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-medium text-white/90">{s.label}</div>
+                          {finding && statusPill(finding.status)}
+                        </div>
+                        {s.description && (
+                          <div className="mt-0.5 text-xs text-white/60">{s.description}</div>
+                        )}
+                        {finding?.actualValue && (
+                          <div className="mt-1 font-mono text-xs text-white/70">
+                            Actual: {finding.actualValue}
+                          </div>
+                        )}
+                        {finding?.note && (
+                          <div className="mt-1 text-xs text-white/50">{finding.note}</div>
+                        )}
+                      </div>
+                    </div>
+                    {i < waterfall.length - 1 && (
+                      <div className="flex justify-center py-1">
+                        <ArrowDown className="h-4 w-4 text-white/30" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// =================== MIS Panel ===================
+
+function MISPanel({
+  company,
+  onUpdate,
+}: {
+  company: Company;
+  onUpdate: (c: Company) => void;
+}) {
+  const ts = company.termSheet!;
+  const history = ts.misHistory || [];
+  const sorted = [...history].sort(
+    (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime(),
+  );
+  const parseFn = useServerFn(parseDocument);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(sorted[0]?.id ?? null);
+
+  const handleFile = async (file: File) => {
+    setLoading(true);
+    try {
+      toast.info(`Extracting text from ${file.name}…`);
+      const text = await extractPdfText(file);
+      if (text.length < 30) {
+        toast.error("Could not extract text from MIS PDF.");
+        return;
+      }
+      // Build compact context from current termSheet obligations
+      const context = JSON.stringify({
+        covenants: normalizeCovenants(ts.covenants),
+        security: ts.securityDetail || {},
+        escrow: ts.escrow || {},
+      });
+      toast.info("Running AI compliance check…");
+      const res = await parseFn({ data: { text, mode: "mis", context } });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      const r = res.data as {
+        period?: string;
+        breachDetected?: boolean;
+        aiSummary?: string;
+        suggestedWatchReason?: string;
+        findings?: ComplianceFinding[];
+      };
+      const entry: MISEntry = {
+        id: `mis-${Date.now()}`,
+        fileName: file.name,
+        uploadedAt: new Date().toISOString(),
+        period: r.period,
+        aiSummary: r.aiSummary,
+        suggestedWatchReason: r.suggestedWatchReason,
+        breachDetected: !!r.breachDetected,
+        findings: Array.isArray(r.findings) ? r.findings : [],
+      };
+      const newHist = [...history, entry];
+      const updated = updateCompany(company.id, {
+        termSheet: { ...ts, misHistory: newHist },
+      });
+      if (updated) {
+        onUpdate(updated);
+        setExpanded(entry.id);
+        if (entry.breachDetected) {
+          toast.warning("MIS uploaded — potential breach flagged.");
+        } else {
+          toast.success("MIS uploaded — no breaches detected.");
+        }
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      className="rounded-lg border p-5"
+      style={{ borderColor: "#1A2B47", backgroundColor: "#15253F" }}
+    >
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-[#FF7553]" />
+            <h3 className="text-sm font-semibold text-white">MIS Reports</h3>
+            <span className="text-xs text-white/40">({sorted.length})</span>
+          </div>
+          <div className="mt-0.5 text-xs text-white/50">
+            Upload periodic MIS to check covenant / security / escrow compliance.
+          </div>
+        </div>
+        <UploadButton loading={loading} onPick={handleFile} label="Upload MIS" />
+      </div>
+
+      {sorted.length === 0 ? (
+        <div
+          className="flex flex-col items-center justify-center rounded-md border border-dashed py-10 text-sm text-white/40"
+          style={{ borderColor: "#1A2B47" }}
+        >
+          <FileText className="mb-2 h-6 w-6 text-white/20" />
+          No MIS uploaded yet.
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {sorted.map((e) => {
+            const isOpen = expanded === e.id;
+            return (
+              <li
+                key={e.id}
+                className="rounded-md border"
+                style={{ borderColor: "#1A2B47", backgroundColor: "#1C3151" }}
+              >
+                <button
+                  onClick={() => setExpanded(isOpen ? null : e.id)}
+                  className="flex w-full items-center gap-3 px-3 py-2 text-left"
+                >
+                  {isOpen ? (
+                    <ChevronDown className="h-4 w-4 text-white/50" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-white/50" />
+                  )}
+                  <FileText className="h-4 w-4 text-white/40" />
+                  <div className="flex-1">
+                    <div className="text-sm text-white/90">{e.fileName}</div>
+                    <div className="text-[11px] text-white/40">
+                      {e.period || "Period —"} · uploaded {formatDate(e.uploadedAt)}
+                    </div>
+                  </div>
+                  {e.breachDetected ? (
+                    <span
+                      className="rounded px-2 py-0.5 text-[10px] font-semibold uppercase"
+                      style={{ backgroundColor: "#EF444420", color: "#EF4444" }}
+                    >
+                      Breach
+                    </span>
+                  ) : (
+                    <span
+                      className="rounded px-2 py-0.5 text-[10px] font-semibold uppercase"
+                      style={{ backgroundColor: "#22C55E20", color: "#22C55E" }}
+                    >
+                      Compliant
+                    </span>
+                  )}
+                </button>
+                {isOpen && (
+                  <div className="border-t px-3 py-3" style={{ borderColor: "#1A2B47" }}>
+                    {e.aiSummary && (
+                      <div className="mb-3 text-xs text-white/70">{e.aiSummary}</div>
+                    )}
+                    {e.findings.length === 0 ? (
+                      <div className="text-xs text-white/40">No findings parsed.</div>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {e.findings.map((f, i) => (
+                          <li key={i} className="flex items-start gap-2 text-xs">
+                            <span className="mt-0.5">{statusIcon(f.status)}</span>
+                            <div className="flex-1">
+                              <div className="text-white/85">{f.label}</div>
+                              {(f.note || f.actualValue) && (
+                                <div className="text-white/50">
+                                  {f.actualValue ? `${f.actualValue}` : ""}
+                                  {f.actualValue && f.note ? " — " : ""}
+                                  {f.note || ""}
+                                </div>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
