@@ -3,7 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import {
   getCompany,
   updateCompany,
+  normalizeCovenants,
   type Company,
+  type MISEntry,
+  type ComplianceFinding,
+  type TermSheetData,
   formatCr,
   formatDate,
   SECTOR_COLORS,
@@ -22,6 +26,13 @@ import {
   CheckCircle2,
   Circle,
   AlertCircle,
+  CheckCircle,
+  XCircle,
+  MinusCircle,
+  ChevronDown,
+  ChevronRight,
+  ShieldCheck,
+  ArrowDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
