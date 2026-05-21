@@ -150,7 +150,7 @@ export const parseDocument = createServerFn({ method: "POST" })
             model: "google/gemini-2.5-pro",
             messages: [
               { role: "system", content: prompt.system },
-              { role: "user", content: prompt.user(data.text) },
+              { role: "user", content: userMsg },
             ],
             response_format: { type: "json_object" },
           }),
