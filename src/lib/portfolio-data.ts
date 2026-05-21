@@ -23,20 +23,84 @@ export type Sector =
 
 export type KeyPerson = { name: string; designation: string };
 
+export type CovenantItem = {
+  id: string;
+  text: string;
+  type?: "financial" | "affirmative" | "negative";
+  threshold?: string;
+};
+
+export type SecurityData = {
+  collateral?: string;
+  charge?: string;
+  coverage?: string;
+  guarantors?: string;
+  valuation?: string;
+  perfectionStatus?: string;
+};
+
+export type EscrowWaterfallStep = {
+  step: number;
+  label: string;
+  description?: string;
+};
+
+export type EscrowData = {
+  bank?: string;
+  account?: string;
+  triggerEvents?: string;
+  waterfall?: EscrowWaterfallStep[];
+};
+
+export type ComplianceFinding = {
+  key: string; // covenant id, or "security.<field>", or "escrow.step.<n>"
+  label: string;
+  status: "pass" | "breach" | "unknown";
+  note?: string;
+  actualValue?: string;
+};
+
+export type MISEntry = {
+  id: string;
+  fileName: string;
+  uploadedAt: string;
+  period?: string;
+  aiSummary?: string;
+  breachDetected: boolean;
+  findings: ComplianceFinding[];
+  watchlistDismissed?: boolean;
+  suggestedWatchReason?: string;
+};
+
 export type TermSheetData = {
   issuer?: string;
   instrument?: string;
   issueSize?: string;
   coupon?: string;
   tenor?: string;
-  security?: string;
+  security?: string; // legacy free text
+  securityDetail?: SecurityData;
   repayment?: string;
-  covenants?: string[];
+  covenants?: CovenantItem[] | string[]; // back-compat
   putCall?: string;
   conditionsPrecedent?: string;
   closingDate?: string;
   risks?: string[];
+  escrow?: EscrowData;
+  misHistory?: MISEntry[];
 };
+
+// Normalize covenants from either legacy string[] or new CovenantItem[]
+export function normalizeCovenants(
+  cov: CovenantItem[] | string[] | undefined,
+): CovenantItem[] {
+  if (!cov) return [];
+  return cov.map((c, i) =>
+    typeof c === "string"
+      ? { id: `cov-${i}`, text: c, type: "affirmative" as const }
+      : c,
+  );
+}
 
 export type PreDDData = {
   snapshot?: string;

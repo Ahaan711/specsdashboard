@@ -6,12 +6,16 @@ import { z } from "zod";
 
 const InputSchema = z.object({
   text: z.string().min(20).max(120_000),
-  mode: z.enum(["termsheet", "predd", "risks"]),
+  mode: z.enum(["termsheet", "predd", "risks", "mis"]),
+  context: z.string().max(40_000).optional(),
 });
 
 type Mode = z.infer<typeof InputSchema>["mode"];
 
-const PROMPTS: Record<Mode, { system: string; user: (t: string) => string }> = {
+const PROMPTS: Record<
+  Mode,
+  { system: string; user: (t: string, ctx?: string) => string }
+> = {
   termsheet: {
     system:
       "You are a private-credit analyst assistant. Extract structured fields from term sheets. Always reply with ONLY valid JSON (no markdown fences, no commentary).",
@@ -25,7 +29,27 @@ Return JSON with this shape:
   "tenor": string,
   "security": string,
   "repayment": string,
-  "covenants": string[],
+  "covenants": [{
+    "id": string (e.g. "cov-1"),
+    "text": string,
+    "type": "financial" | "affirmative" | "negative",
+    "threshold": string (numeric threshold or trigger, if any)
+  }],
+  "securityDetail": {
+    "collateral": string,
+    "charge": string (first/second/pari-passu/exclusive),
+    "coverage": string (e.g. "2.0x asset cover"),
+    "guarantors": string,
+    "valuation": string,
+    "perfectionStatus": string
+  },
+  "escrow": {
+    "bank": string,
+    "account": string,
+    "triggerEvents": string,
+    "waterfall": [{ "step": number, "label": string, "description": string }]
+      (ordered cash-flow waterfall: typical order is Inflows > Reserve/DSRA > Interest > Principal > Surplus to borrower)
+  },
   "putCall": string,
   "conditionsPrecedent": string,
   "closingDate": string,
@@ -66,7 +90,38 @@ Return JSON: { "risks": string[] }
 DOCUMENT:
 ${t.slice(0, 60000)}`,
   },
+  mis: {
+    system:
+      "You are a private-credit monitoring analyst. Compare the company's latest MIS (Management Information System) report against the agreed term-sheet covenants, security and escrow waterfall. Identify breaches. Always reply with ONLY valid JSON (no markdown fences, no commentary).",
+    user: (t, ctx) => `You are given (A) the structured term-sheet obligations and (B) the latest MIS report text.
+Check whether the company is complying with each covenant, the security/collateral arrangement, and the escrow waterfall. Identify any breach.
+
+Return JSON with this exact shape:
+{
+  "period": string (reporting period inferred from MIS, e.g. "Q3 FY25" or "Sep-2025"),
+  "breachDetected": boolean,
+  "aiSummary": string (1-2 sentences plain-English summary of compliance status),
+  "suggestedWatchReason": string (if breachDetected, a concise reason suitable for the watchlist; else ""),
+  "findings": [
+    {
+      "key": string (use covenant.id for covenants like "cov-1"; use "security.<field>" for security; use "escrow.step.<n>" for waterfall steps),
+      "label": string (human-readable label of what was checked),
+      "status": "pass" | "breach" | "unknown",
+      "note": string (1 line explaining why),
+      "actualValue": string (observed value from MIS if applicable)
+    }
+  ]
+}
+
+(A) TERM-SHEET OBLIGATIONS (JSON):
+${ctx ?? "{}"}
+
+(B) MIS REPORT TEXT:
+${t.slice(0, 70000)}`,
+  },
 };
+
+
 
 export const parseDocument = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => InputSchema.parse(input))
@@ -80,6 +135,7 @@ export const parseDocument = createServerFn({ method: "POST" })
     }
 
     const prompt = PROMPTS[data.mode];
+    const userMsg = prompt.user(data.text, data.context);
 
     try {
       const res = await fetch(
@@ -94,7 +150,7 @@ export const parseDocument = createServerFn({ method: "POST" })
             model: "google/gemini-2.5-pro",
             messages: [
               { role: "system", content: prompt.system },
-              { role: "user", content: prompt.user(data.text) },
+              { role: "user", content: userMsg },
             ],
             response_format: { type: "json_object" },
           }),
