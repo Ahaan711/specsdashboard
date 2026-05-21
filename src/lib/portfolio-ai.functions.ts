@@ -135,6 +135,7 @@ export const parseDocument = createServerFn({ method: "POST" })
     }
 
     const prompt = PROMPTS[data.mode];
+    const userMsg = prompt.user(data.text, data.context);
 
     try {
       const res = await fetch(
