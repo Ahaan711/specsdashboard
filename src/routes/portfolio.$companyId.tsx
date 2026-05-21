@@ -138,6 +138,9 @@ function CompanyDetail() {
         </div>
       )}
 
+      <WatchlistSuggestionBanner company={company} onUpdate={setCompany} />
+
+
       <Tabs defaultValue={"overview" as TabKey} className="w-full">
         <TabsList className="border bg-[#15253F]" style={{ borderColor: "#1A2B47" }}>
           <TabsTrigger value="overview">Overview</TabsTrigger>
