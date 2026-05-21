@@ -6,7 +6,8 @@ import { z } from "zod";
 
 const InputSchema = z.object({
   text: z.string().min(20).max(120_000),
-  mode: z.enum(["termsheet", "predd", "risks"]),
+  mode: z.enum(["termsheet", "predd", "risks", "mis"]),
+  context: z.string().max(40_000).optional(),
 });
 
 type Mode = z.infer<typeof InputSchema>["mode"];
