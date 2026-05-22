@@ -28,7 +28,6 @@ const NAV: NavItem[] = [
   { to: "/portfolio", label: "Portfolio", icon: Briefcase, exact: true },
   { to: "/portfolio/watchlist", label: "Watchlist", icon: Eye },
   { to: "/portfolio/settings", label: "Settings", icon: SettingsIcon },
-  { to: "/portfolio-legacy", label: "Legacy App", icon: FileText },
 ];
 
 function PortfolioLayout() {
