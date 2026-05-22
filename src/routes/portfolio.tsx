@@ -1,12 +1,10 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
   Briefcase,
-  
   Eye,
   Settings as SettingsIcon,
   Home,
   Search,
-  FileText,
 } from "lucide-react";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -30,7 +28,6 @@ const NAV: NavItem[] = [
   { to: "/portfolio", label: "Portfolio", icon: Briefcase, exact: true },
   { to: "/portfolio/watchlist", label: "Watchlist", icon: Eye },
   { to: "/portfolio/settings", label: "Settings", icon: SettingsIcon },
-  { to: "/portfolio-legacy", label: "Legacy App", icon: FileText },
 ];
 
 function PortfolioLayout() {
