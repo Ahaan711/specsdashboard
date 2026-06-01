@@ -13,7 +13,7 @@ import {
   SECTOR_COLORS,
   STATUS_COLORS,
 } from "@/lib/portfolio-data";
-import { extractPdfText } from "@/lib/pdf-extract";
+import { extractPdfText, extractDocText } from "@/lib/pdf-extract";
 import { parseDocument } from "@/lib/portfolio-ai.functions";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -417,9 +417,9 @@ function TermSheetTab({
     setLoadingTs(true);
     try {
       toast.info(`Extracting text from ${file.name}…`);
-      const text = await extractPdfText(file);
+      const text = await extractDocText(file);
       if (text.length < 30) {
-        toast.error("Could not extract text from PDF (might be scanned).");
+        toast.error("Could not extract text from file (might be scanned PDF or empty HTML).");
         return;
       }
       toast.info("Parsing with AI…");
@@ -451,9 +451,14 @@ function TermSheetTab({
       <div>
         <div className="mb-4 flex items-center justify-between">
           <div className="text-xs text-white/50">
-            Upload Term Sheet PDF to auto-extract covenants, security & escrow waterfall.
+            Upload Term Sheet (PDF or HTML) to auto-extract covenants, security & escrow waterfall.
           </div>
-          <UploadButton loading={loadingTs} onPick={handleTermSheet} label="Upload Term Sheet" />
+          <UploadButton
+            loading={loadingTs}
+            onPick={handleTermSheet}
+            label="Upload Term Sheet"
+            accept="application/pdf,text/html,.htm,.html"
+          />
         </div>
         <div
           className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-sm text-white/40"
@@ -486,7 +491,13 @@ function TermSheetTab({
         <SummaryBit label="Tenor" value={ts.tenor} />
         <SummaryBit label="Closing" value={ts.closingDate} />
         <div className="ml-auto">
-          <UploadButton loading={loadingTs} onPick={handleTermSheet} label="Re-upload Term Sheet" small />
+          <UploadButton
+            loading={loadingTs}
+            onPick={handleTermSheet}
+            label="Re-upload Term Sheet"
+            small
+            accept="application/pdf,text/html,.htm,.html"
+          />
         </div>
       </div>
 
@@ -527,17 +538,19 @@ function UploadButton({
   onPick,
   label,
   small,
+  accept = "application/pdf",
 }: {
   loading: boolean;
   onPick: (f: File) => void;
   label: string;
   small?: boolean;
+  accept?: string;
 }) {
   return (
     <label>
       <input
         type="file"
-        accept="application/pdf"
+        accept={accept}
         className="hidden"
         disabled={loading}
         onChange={(e) => {
@@ -775,6 +788,14 @@ function MISPanel({
         aiSummary?: string;
         suggestedWatchReason?: string;
         findings?: ComplianceFinding[];
+        financials?: {
+          revenue?: string;
+          ebitda?: string;
+          pat?: string;
+          debt?: string;
+          netWorth?: string;
+          ratios?: { label: string; value: string }[];
+        };
       };
       const entry: MISEntry = {
         id: `mis-${Date.now()}`,
@@ -787,16 +808,42 @@ function MISPanel({
         findings: Array.isArray(r.findings) ? r.findings : [],
       };
       const newHist = [...history, entry];
+
+      // Merge any non-empty financial fields into company.liveData
+      const prevLive = company.liveData || {};
+      const fin = r.financials || {};
+      const pickStr = (next?: string, prev?: string) =>
+        next && next.trim() ? next : prev;
+      const mergedLive = {
+        ...prevLive,
+        revenue: pickStr(fin.revenue, prevLive.revenue),
+        ebitda: pickStr(fin.ebitda, prevLive.ebitda),
+        pat: pickStr(fin.pat, prevLive.pat),
+        debt: pickStr(fin.debt, prevLive.debt),
+        netWorth: pickStr(fin.netWorth, prevLive.netWorth),
+        ratios:
+          Array.isArray(fin.ratios) && fin.ratios.length > 0
+            ? fin.ratios
+            : prevLive.ratios,
+        updatedAt: new Date().toISOString(),
+      };
+
       const updated = updateCompany(company.id, {
         termSheet: { ...ts, misHistory: newHist },
+        liveData: mergedLive,
       });
       if (updated) {
         onUpdate(updated);
         setExpanded(entry.id);
+        const breaches = entry.findings.filter((f) => f.status === "breach").length;
         if (entry.breachDetected) {
-          toast.warning("MIS uploaded — potential breach flagged.");
+          toast.warning(
+            `MIS parsed — financials updated, ${entry.findings.length} findings (${breaches} breach${breaches === 1 ? "" : "es"}).`,
+          );
         } else {
-          toast.success("MIS uploaded — no breaches detected.");
+          toast.success(
+            `MIS parsed — financials updated, ${entry.findings.length} findings, no breaches.`,
+          );
         }
       }
     } catch (e) {
