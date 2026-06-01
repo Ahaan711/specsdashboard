@@ -78,7 +78,9 @@ export async function pullCompanies(): Promise<Result> {
   const local = loadCompanies();
   const merged = new Map<string, Company>();
   local.forEach((c) => merged.set(c.id, c));
-  data.forEach((row: { payload: Company }) => merged.set(row.payload.id, row.payload));
+  data.forEach((row: { payload: Company }) =>
+    merged.set(row.payload.id, row.payload),
+  );
   saveCompanies(Array.from(merged.values()));
   return { ok: true };
 }
