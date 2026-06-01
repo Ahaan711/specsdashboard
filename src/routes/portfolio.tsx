@@ -36,6 +36,21 @@ const NAV: NavItem[] = [
 function PortfolioLayout() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [query, setQuery] = useState("");
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    const res = await syncAll();
+    setSyncing(false);
+    if (res.ok) {
+      toast.success("Synced with cloud.");
+      window.dispatchEvent(new CustomEvent("portfolio:synced"));
+    } else if (res.notProvisioned) {
+      toast.warning("Cloud sync not provisioned yet — retry later.");
+    } else {
+      toast.error(res.error || "Sync failed.");
+    }
+  };
 
   return (
     <div className="flex h-screen w-full" style={{ backgroundColor: "#0F1B2E", color: "#E5E7EB" }}>
