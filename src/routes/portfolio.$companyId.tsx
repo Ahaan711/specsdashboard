@@ -15,6 +15,7 @@ import {
 } from "@/lib/portfolio-data";
 import { extractPdfText, extractDocText } from "@/lib/pdf-extract";
 import { parseDocument } from "@/lib/portfolio-ai.functions";
+import { uploadDocument } from "@/lib/cloud-sync";
 import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowLeft,
