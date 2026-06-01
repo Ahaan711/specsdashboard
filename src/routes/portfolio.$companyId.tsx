@@ -857,6 +857,15 @@ function MISPanel({
           );
         }
       }
+      uploadDocument(file, {
+        kind: "mis",
+        companyId: company.id,
+        companyName: company.name,
+      }).then((r) => {
+        if (!r.ok && !r.notProvisioned) {
+          console.warn("Document archive failed:", r.error);
+        }
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
