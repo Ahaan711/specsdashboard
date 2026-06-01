@@ -491,7 +491,13 @@ function TermSheetTab({
         <SummaryBit label="Tenor" value={ts.tenor} />
         <SummaryBit label="Closing" value={ts.closingDate} />
         <div className="ml-auto">
-          <UploadButton loading={loadingTs} onPick={handleTermSheet} label="Re-upload Term Sheet" small />
+          <UploadButton
+            loading={loadingTs}
+            onPick={handleTermSheet}
+            label="Re-upload Term Sheet"
+            small
+            accept="application/pdf,text/html,.htm,.html"
+          />
         </div>
       </div>
 
