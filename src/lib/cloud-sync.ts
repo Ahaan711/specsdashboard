@@ -4,12 +4,16 @@
 // Designed to fail gracefully if the migration hasn't been applied yet:
 // every helper returns { ok, error?, notProvisioned? } and never throws.
 
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as supabaseTyped } from "@/integrations/supabase/client";
 import {
   loadCompanies,
   saveCompanies,
   type Company,
 } from "./portfolio-data";
+
+// Tables created in a not-yet-typed migration; cast away strict typing.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const supabase = supabaseTyped as any;
 
 const BUCKET = "portfolio-docs";
 const DEALS_KEY = "pipeline_deals_v1";
