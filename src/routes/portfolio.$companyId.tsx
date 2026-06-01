@@ -15,6 +15,7 @@ import {
 } from "@/lib/portfolio-data";
 import { extractPdfText, extractDocText } from "@/lib/pdf-extract";
 import { parseDocument } from "@/lib/portfolio-ai.functions";
+import { uploadDocument } from "@/lib/cloud-sync";
 import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowLeft,
@@ -439,6 +440,16 @@ function TermSheetTab({
         onUpdate(updated);
         toast.success("Term sheet parsed and saved.");
       }
+      // Best-effort: archive original document to cloud (non-blocking).
+      uploadDocument(file, {
+        kind: "termsheet",
+        companyId: company.id,
+        companyName: company.name,
+      }).then((r) => {
+        if (!r.ok && !r.notProvisioned) {
+          console.warn("Document archive failed:", r.error);
+        }
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -846,6 +857,15 @@ function MISPanel({
           );
         }
       }
+      uploadDocument(file, {
+        kind: "mis",
+        companyId: company.id,
+        companyName: company.name,
+      }).then((r) => {
+        if (!r.ok && !r.notProvisioned) {
+          console.warn("Document archive failed:", r.error);
+        }
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {

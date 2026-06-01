@@ -5,9 +5,12 @@ import {
   Settings as SettingsIcon,
   Home,
   Search,
+  RefreshCw,
 } from "lucide-react";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
+import { syncAll } from "@/lib/cloud-sync";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/portfolio")({
   head: () => ({
@@ -33,6 +36,21 @@ const NAV: NavItem[] = [
 function PortfolioLayout() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [query, setQuery] = useState("");
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    const res = await syncAll();
+    setSyncing(false);
+    if (res.ok) {
+      toast.success("Synced with cloud.");
+      window.dispatchEvent(new CustomEvent("portfolio:synced"));
+    } else if (res.notProvisioned) {
+      toast.warning("Cloud sync not provisioned yet — retry later.");
+    } else {
+      toast.error(res.error || "Sync failed.");
+    }
+  };
 
   return (
     <div className="flex h-screen w-full" style={{ backgroundColor: "#0F1B2E", color: "#E5E7EB" }}>
@@ -88,6 +106,16 @@ function PortfolioLayout() {
               className="h-9 border-0 bg-[#15253F] pl-9 text-sm text-white placeholder:text-white/30 focus-visible:ring-1 focus-visible:ring-[#FF7553]/40"
             />
           </div>
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium text-white/80 transition-colors hover:bg-[#1C3151] disabled:opacity-50"
+            style={{ borderColor: "#1A2B47", backgroundColor: "#15253F" }}
+            title="Push local changes to cloud and pull latest"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing…" : "Sync"}
+          </button>
         </header>
         <main className="flex-1 overflow-auto">
           <Outlet />
