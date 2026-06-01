@@ -527,17 +527,19 @@ function UploadButton({
   onPick,
   label,
   small,
+  accept = "application/pdf",
 }: {
   loading: boolean;
   onPick: (f: File) => void;
   label: string;
   small?: boolean;
+  accept?: string;
 }) {
   return (
     <label>
       <input
         type="file"
-        accept="application/pdf"
+        accept={accept}
         className="hidden"
         disabled={loading}
         onChange={(e) => {
