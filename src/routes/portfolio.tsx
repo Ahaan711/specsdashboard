@@ -5,9 +5,12 @@ import {
   Settings as SettingsIcon,
   Home,
   Search,
+  RefreshCw,
 } from "lucide-react";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
+import { syncAll } from "@/lib/cloud-sync";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/portfolio")({
   head: () => ({
