@@ -106,6 +106,16 @@ function PortfolioLayout() {
               className="h-9 border-0 bg-[#15253F] pl-9 text-sm text-white placeholder:text-white/30 focus-visible:ring-1 focus-visible:ring-[#FF7553]/40"
             />
           </div>
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium text-white/80 transition-colors hover:bg-[#1C3151] disabled:opacity-50"
+            style={{ borderColor: "#1A2B47", backgroundColor: "#15253F" }}
+            title="Push local changes to cloud and pull latest"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing…" : "Sync"}
+          </button>
         </header>
         <main className="flex-1 overflow-auto">
           <Outlet />
