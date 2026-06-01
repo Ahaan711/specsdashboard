@@ -13,7 +13,7 @@ import {
   SECTOR_COLORS,
   STATUS_COLORS,
 } from "@/lib/portfolio-data";
-import { extractPdfText } from "@/lib/pdf-extract";
+import { extractPdfText, extractDocText } from "@/lib/pdf-extract";
 import { parseDocument } from "@/lib/portfolio-ai.functions";
 import { useServerFn } from "@tanstack/react-start";
 import {
