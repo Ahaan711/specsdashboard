@@ -440,6 +440,16 @@ function TermSheetTab({
         onUpdate(updated);
         toast.success("Term sheet parsed and saved.");
       }
+      // Best-effort: archive original document to cloud (non-blocking).
+      uploadDocument(file, {
+        kind: "termsheet",
+        companyId: company.id,
+        companyName: company.name,
+      }).then((r) => {
+        if (!r.ok && !r.notProvisioned) {
+          console.warn("Document archive failed:", r.error);
+        }
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
