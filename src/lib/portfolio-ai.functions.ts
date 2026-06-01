@@ -110,8 +110,18 @@ Return JSON with this exact shape:
       "note": string (1 line explaining why),
       "actualValue": string (observed value from MIS if applicable)
     }
-  ]
+  ],
+  "financials": {
+    "revenue": string (₹ Cr formatted if possible, else ""),
+    "ebitda": string,
+    "pat": string,
+    "debt": string,
+    "netWorth": string,
+    "ratios": [{ "label": string, "value": string }]
+      (key credit ratios from MIS: DSCR, D/E, NIM, GNPA, ROA, ROE, Capacity Util., EBITDA Margin, etc.)
+  }
 }
+Leave any field as "" or [] if not present in the MIS.
 
 (A) TERM-SHEET OBLIGATIONS (JSON):
 ${ctx ?? "{}"}
