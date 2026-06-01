@@ -417,9 +417,9 @@ function TermSheetTab({
     setLoadingTs(true);
     try {
       toast.info(`Extracting text from ${file.name}…`);
-      const text = await extractPdfText(file);
+      const text = await extractDocText(file);
       if (text.length < 30) {
-        toast.error("Could not extract text from PDF (might be scanned).");
+        toast.error("Could not extract text from file (might be scanned PDF or empty HTML).");
         return;
       }
       toast.info("Parsing with AI…");
