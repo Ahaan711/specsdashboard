@@ -1,79 +1,51 @@
-## Goals
+# Term Sheet (PDF/HTML) + MIS → Financials
 
-1. Remove the **Legacy App** link from the PortfolioOS sidebar (it stays accessible only via the Home / Command Center card).
-2. Replace the per-browser `localStorage` store with a shared **Lovable Cloud** (Supabase) backend so every visitor sees the same data, with **realtime sync** for edits.
-3. Add an **audit log** that records every change (who/what/when/before→after) and is viewable inside PortfolioOS.
+## What already exists (no rebuild needed)
 
----
+- Term Sheet tab with sub-tabs **Covenants / Security / Escrow Flow** and an Upload button that parses a PDF, calls Lovable AI, and populates every field — `src/routes/portfolio.$companyId.tsx` (`TermSheetTab`, lines ~410–470).
+- MIS Reports panel that uploads a PDF, cross-checks against the saved term sheet, writes a `MISEntry` with `findings[]` (pass / breach / unknown per covenant, security field, escrow step), and surfaces a watchlist-suggestion banner — same file (`MISPanel`, lines ~735–810).
+- Backend AI modes `termsheet` and `mis` in `src/lib/portfolio-ai.functions.ts`.
 
-## 1. Sidebar cleanup
+## Gaps to close
 
-`src/routes/portfolio.tsx` — remove the `{ to: "/portfolio-legacy", label: "Legacy App", icon: FileText }` entry from `NAV`. Keep the route file itself intact so Home's Pipeline/Legacy card still works.
+### 1. Accept HTML term sheets (in addition to PDF)
 
----
+- `src/lib/pdf-extract.ts`: add a sibling helper `extractHtmlText(file: File)` that reads the file as text, strips tags (`DOMParser` → `textContent`), collapses whitespace, and returns plain text. Same return contract as `extractPdfText`.
+- New tiny dispatcher `extractDocText(file)` that picks PDF vs HTML based on `file.type` / extension (`.html`, `.htm`).
+- `TermSheetTab.handleFile` in `src/routes/portfolio.$companyId.tsx`: call `extractDocText` instead of `extractPdfText`, and update the file input `accept` from `application/pdf` to `application/pdf,text/html,.htm,.html`.
+- `UploadButton` (same file) already takes an `accept` prop — just widen it for the term-sheet upload site. Leave MIS upload PDF-only unless asked.
 
-## 2. Shared data + realtime sync
+### 2. MIS upload also refreshes Overview financials
 
-Today `portfolio-data.ts` reads/writes `localStorage` (key `portfolio_companies_v1`) plus the embedded `misHistory` array. Move this to Supabase, keep the same `Company` shape so UI code barely changes.
+- Extend the `mis` AI prompt in `portfolio-ai.functions.ts` to additionally return a `financials` block matching `LiveFinancials` shape:
+  ```
+  "financials": {
+    "revenue": string, "ebitda": string, "pat": string,
+    "debt": string, "netWorth": string,
+    "ratios": [{ "label": string, "value": string }]
+  }
+  ```
+  Fields are optional — model returns `""` / `[]` when MIS doesn't contain them.
+- In `MISPanel.handleFile` (`src/routes/portfolio.$companyId.tsx`), after building the `MISEntry`, merge any non-empty `financials` into `company.liveData`:
+  - Keep existing `rating`, `stockPrice`, `news` (MIS won't have those).
+  - Overwrite `revenue / ebitda / pat / debt / netWorth` when MIS provides them.
+  - Replace `ratios` only if MIS returned a non-empty array; otherwise keep prior ratios.
+  - Set `liveData.updatedAt = new Date().toISOString()` and add a small "Last MIS update" hint in the Overview financials card.
+- Single `updateCompany(id, { termSheet: { ...misHistory }, liveData: mergedLiveData })` call so the Overview tab re-renders immediately (it already reads from `company.liveData`).
 
-**Schema (new migration)**
-- `portfolio_companies` — one row per company. Columns: `id text pk`, `name`, `sector`, plus a single `data jsonb` column holding the rest of the `Company` object (term sheet, security, escrow, liveData, etc.). Reason: keeps the rich nested types we already have without flattening dozens of fields.
-- `portfolio_audit_log` — `id uuid`, `company_id text`, `company_name text`, `action text` ('create'|'update'|'delete'|'mis_upload'|'watchlist_change'), `field text` nullable, `before jsonb`, `after jsonb`, `summary text`, `actor text`, `created_at timestamptz default now()`.
-- RLS: this app has no auth (single-user internal tool per Settings page). Enable RLS and add permissive policies for `anon` (select/insert/update/delete) on both tables — matches current "anyone on the site can edit" behavior. Add a note that auth can be layered later.
-- Enable realtime: `ALTER PUBLICATION supabase_realtime ADD TABLE portfolio_companies, portfolio_audit_log;`
+### 3. UX polish
 
-**Data layer (`src/lib/portfolio-data.ts`)**
-- Replace `loadCompanies / saveCompanies / getCompany / updateCompany / resetSeed` with async Supabase-backed versions.
-- Add `subscribeCompanies(cb)` that wires `supabase.channel('companies').on('postgres_changes', …)` and calls back with the fresh list.
-- Add `seedIfEmpty()` — on first load, if table is empty, insert the existing SEED array so the demo data is preserved.
-- Keep the `Company` / `TermSheetData` / `MISEntry` types exactly as-is.
+- Toast on MIS upload now reads: "MIS parsed — financials updated, N findings (X breaches)".
+- Show file-type hint under the Term Sheet upload button: "PDF or HTML".
 
-**Hook (`src/lib/use-companies.ts`, new)**
-- `useCompanies()` returns `{ companies, loading }`, fetches on mount, subscribes to realtime changes, unsubscribes on unmount.
-- `useCompany(id)` thin wrapper.
+## Out of scope
 
-**Component updates**
-- `portfolio.index.tsx`, `portfolio.watchlist.tsx`, `portfolio.$companyId.tsx`, `portfolio.settings.tsx`, `pipeline.tsx` (if it uses the same store — verify): swap synchronous `loadCompanies()` / `updateCompany()` calls for the new async hook + `await updateCompany(...)`. Show a small "Syncing…" indicator while loading.
+- No schema/Supabase migration (data still lives in localStorage per current `portfolio-data.ts`).
+- No changes to MIS history panel layout, watchlist banner, or covenant/security/escrow rendering.
+- No DOCX support (can add later with mammoth if needed).
 
-**Pipeline tracker note:** memory says pipeline currently uses its own `pipeline_deals_v1` localStorage key. Same treatment — new table `pipeline_deals` with realtime + audit entries — so "any change anyone makes is visible to everyone" holds across the whole app.
+## Files touched
 
----
-
-## 3. Audit log
-
-**Write side** — every mutation helper in `portfolio-data.ts` (and `pipeline.tsx`'s deal mutations) inserts a row into `portfolio_audit_log`:
-- On `updateCompany(id, patch)`: diff `patch` vs current row, write one entry per changed top-level field (`field`, `before`, `after`), plus a human `summary` like `"Moneyview · status changed Active → Watch"`.
-- On MIS upload: action `mis_upload`, summary includes filename + breach count.
-- On watchlist accept/dismiss: action `watchlist_change`.
-- `actor` — since there is no auth, store a per-browser nickname kept in `localStorage` (`audit_actor`); Settings page gets a text input "Your name (shown in audit log)" defaulting to `"Anonymous"`.
-
-**Read side** — new route `src/routes/portfolio.audit.tsx` (nav item "Audit Log", icon `History`):
-- Table: timestamp · actor · company · action · summary, newest first.
-- Filters: company dropdown, action dropdown, date range.
-- Live: subscribe to `portfolio_audit_log` realtime inserts and prepend.
-- Row click → expandable JSON diff (`before` / `after`).
-
----
-
-## Technical details
-
-- Files to **edit**: `src/routes/portfolio.tsx` (nav), `src/lib/portfolio-data.ts` (rewrite storage layer), `src/routes/portfolio.index.tsx`, `src/routes/portfolio.$companyId.tsx`, `src/routes/portfolio.watchlist.tsx`, `src/routes/portfolio.settings.tsx`, `src/routes/pipeline.tsx`.
-- Files to **create**: migration for `portfolio_companies` + `portfolio_audit_log` (+ optional `pipeline_deals`), `src/lib/use-companies.ts`, `src/lib/audit.ts` (helper to write audit rows + compute diffs), `src/routes/portfolio.audit.tsx`.
-- Realtime via the browser `supabase` client (RLS-permissive policies make this safe for the internal-tool model).
-- Keep visual styling (`#0B1422`, `#FF7553` etc.) unchanged.
-
----
-
-## Out of scope (call out, ask before doing)
-
-- Adding real authentication / per-user actor identity.
-- Server-side validation via `createServerFn` — direct client writes are fine for an internal tool; we can harden later.
-- Migrating any existing localStorage data on each user's browser into the new table (a one-time "Import my local data" button can be added if needed).
-
----
-
-## Open questions before I build
-
-1. **Pipeline tracker** — should it also move to Supabase + audit log in this same pass, or leave it on localStorage for now?
-2. **Actor identity** — OK with the simple "type your name in Settings" approach, or do you want me to add proper login (Google / email-password) so the audit log records real users?
-3. **Seed behavior** — if the cloud table is already empty when this ships, should I auto-seed the 6 demo companies (Moneyview, GPS Renewables, etc.), or start blank?
+- `src/lib/pdf-extract.ts` — add `extractHtmlText` + `extractDocText`.
+- `src/lib/portfolio-ai.functions.ts` — extend `mis` prompt schema with `financials`.
+- `src/routes/portfolio.$companyId.tsx` — widen term-sheet `accept`, swap extractor, merge MIS financials into `liveData`, update toast.
