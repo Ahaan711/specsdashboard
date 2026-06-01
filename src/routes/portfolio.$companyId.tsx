@@ -451,9 +451,14 @@ function TermSheetTab({
       <div>
         <div className="mb-4 flex items-center justify-between">
           <div className="text-xs text-white/50">
-            Upload Term Sheet PDF to auto-extract covenants, security & escrow waterfall.
+            Upload Term Sheet (PDF or HTML) to auto-extract covenants, security & escrow waterfall.
           </div>
-          <UploadButton loading={loadingTs} onPick={handleTermSheet} label="Upload Term Sheet" />
+          <UploadButton
+            loading={loadingTs}
+            onPick={handleTermSheet}
+            label="Upload Term Sheet"
+            accept="application/pdf,text/html,.htm,.html"
+          />
         </div>
         <div
           className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-sm text-white/40"
