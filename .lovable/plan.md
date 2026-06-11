@@ -1,51 +1,52 @@
-# Term Sheet (PDF/HTML) + MIS → Financials
+## Goal
+Get the manual cloud sync working reliably so PortfolioOS and Deal Manager can push local changes to the hosted backend and pull them onto other machines.
 
-## What already exists (no rebuild needed)
+## What’s blocking sync now
+- The frontend sync buttons are already wired.
+- The hosted backend is reachable, but database reads are timing out intermittently.
+- The sync schema/storage were never successfully provisioned, so the app falls back to “not provisioned yet.”
 
-- Term Sheet tab with sub-tabs **Covenants / Security / Escrow Flow** and an Upload button that parses a PDF, calls Lovable AI, and populates every field — `src/routes/portfolio.$companyId.tsx` (`TermSheetTab`, lines ~410–470).
-- MIS Reports panel that uploads a PDF, cross-checks against the saved term sheet, writes a `MISEntry` with `findings[]` (pass / breach / unknown per covenant, security field, escrow step), and surfaces a watchlist-suggestion banner — same file (`MISPanel`, lines ~735–810).
-- Backend AI modes `termsheet` and `mis` in `src/lib/portfolio-ai.functions.ts`.
+## Plan
 
-## Gaps to close
+### 1. Provision the backend objects the sync code expects
+Create the missing backend pieces in one pass:
+- `portfolio_companies` for PortfolioOS records
+- `pipeline_deals` for Deal Manager records
+- `portfolio_documents` for uploaded term sheets / MIS metadata
+- `portfolio-docs` storage bucket for the actual files
+- access rules so the app can read/write these safely
 
-### 1. Accept HTML term sheets (in addition to PDF)
+### 2. Verify provisioning before touching app behavior
+After the migration succeeds, verify:
+- all three tables exist
+- the storage bucket exists
+- the app can read and write a test row/file without timing out
 
-- `src/lib/pdf-extract.ts`: add a sibling helper `extractHtmlText(file: File)` that reads the file as text, strips tags (`DOMParser` → `textContent`), collapses whitespace, and returns plain text. Same return contract as `extractPdfText`.
-- New tiny dispatcher `extractDocText(file)` that picks PDF vs HTML based on `file.type` / extension (`.html`, `.htm`).
-- `TermSheetTab.handleFile` in `src/routes/portfolio.$companyId.tsx`: call `extractDocText` instead of `extractPdfText`, and update the file input `accept` from `application/pdf` to `application/pdf,text/html,.htm,.html`.
-- `UploadButton` (same file) already takes an `accept` prop — just widen it for the term-sheet upload site. Leave MIS upload PDF-only unless asked.
+### 3. Re-test the current manual sync flow end to end
+Validate the existing buttons already added:
+- PortfolioOS Sync: push local companies, pull latest cloud copy
+- Deal Manager Sync: push/pull deals
+- Documents tab: list metadata and download uploaded files
+- term sheet / MIS uploads: archive file + create document metadata row
 
-### 2. MIS upload also refreshes Overview financials
+### 4. Fix merge reliability if needed
+If sync still feels inconsistent after provisioning, tighten the data merge logic:
+- prefer newest `updated_at` instead of blind last-write wins
+- avoid local stale data overwriting fresher cloud data
+- return clearer per-module sync results (companies, deals, documents)
 
-- Extend the `mis` AI prompt in `portfolio-ai.functions.ts` to additionally return a `financials` block matching `LiveFinancials` shape:
-  ```
-  "financials": {
-    "revenue": string, "ebitda": string, "pat": string,
-    "debt": string, "netWorth": string,
-    "ratios": [{ "label": string, "value": string }]
-  }
-  ```
-  Fields are optional — model returns `""` / `[]` when MIS doesn't contain them.
-- In `MISPanel.handleFile` (`src/routes/portfolio.$companyId.tsx`), after building the `MISEntry`, merge any non-empty `financials` into `company.liveData`:
-  - Keep existing `rating`, `stockPrice`, `news` (MIS won't have those).
-  - Overwrite `revenue / ebitda / pat / debt / netWorth` when MIS provides them.
-  - Replace `ratios` only if MIS returned a non-empty array; otherwise keep prior ratios.
-  - Set `liveData.updatedAt = new Date().toISOString()` and add a small "Last MIS update" hint in the Overview financials card.
-- Single `updateCompany(id, { termSheet: { ...misHistory }, liveData: mergedLiveData })` call so the Overview tab re-renders immediately (it already reads from `company.liveData`).
+### 5. Handle backend flakiness gracefully
+If the hosted database keeps timing out even after provisioning:
+- add retry/backoff around sync operations
+- show a more specific UI message when the backend is temporarily unavailable
+- if the backend instance is overloaded, recommend checking Cloud instance sizing/status in the backend panel
 
-### 3. UX polish
+## Expected outcome
+- Manual push/pull sync works on both PortfolioOS and Deal Manager
+- Uploaded term sheets and MIS files appear in Documents with metadata + download
+- Changes made on one laptop become available on another after pressing Sync
 
-- Toast on MIS upload now reads: "MIS parsed — financials updated, N findings (X breaches)".
-- Show file-type hint under the Term Sheet upload button: "PDF or HTML".
-
-## Out of scope
-
-- No schema/Supabase migration (data still lives in localStorage per current `portfolio-data.ts`).
-- No changes to MIS history panel layout, watchlist banner, or covenant/security/escrow rendering.
-- No DOCX support (can add later with mammoth if needed).
-
-## Files touched
-
-- `src/lib/pdf-extract.ts` — add `extractHtmlText` + `extractDocText`.
-- `src/lib/portfolio-ai.functions.ts` — extend `mis` prompt schema with `financials`.
-- `src/routes/portfolio.$companyId.tsx` — widen term-sheet `accept`, swap extractor, merge MIS financials into `liveData`, update toast.
+## Technical notes
+- This is primarily a backend provisioning issue, not a missing-button issue.
+- The current frontend work should start functioning as soon as the tables and storage bucket exist and are reachable.
+- If the migration service is healthy on the next attempt, this should be a straightforward repair rather than a redesign.
