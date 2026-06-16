@@ -20,6 +20,7 @@ export const Route = createFileRoute("/portfolio/")({
 function PortfolioDashboard() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [query, setQuery] = useState("");
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     setCompanies(loadCompanies());
