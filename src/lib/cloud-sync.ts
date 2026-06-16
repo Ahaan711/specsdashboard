@@ -134,6 +134,32 @@ export async function pullDeals(): Promise<Result> {
   return { ok: true };
 }
 
+// Pull and OVERWRITE local cache for companies.
+export async function pullCompaniesOverwrite(): Promise<Result<Company[]>> {
+  const { data, error } = await supabase
+    .from("portfolio_companies")
+    .select("payload");
+  if (error) {
+    return { ok: false, error: error.message, notProvisioned: isMissing(error) };
+  }
+  const list = (data || []).map((row: { payload: Company }) => row.payload);
+  saveCompanies(list);
+  return { ok: true, data: list };
+}
+
+// Pull and OVERWRITE local cache for deals.
+export async function pullDealsOverwrite(): Promise<Result<Deal[]>> {
+  const { data, error } = await supabase
+    .from("pipeline_deals")
+    .select("payload");
+  if (error) {
+    return { ok: false, error: error.message, notProvisioned: isMissing(error) };
+  }
+  const list = (data || []).map((row: { payload: Deal }) => row.payload);
+  saveDealsLocal(list);
+  return { ok: true, data: list };
+}
+
 // ---------------- Sync orchestration ----------------
 export async function syncAll(): Promise<Result> {
   const results = await Promise.all([

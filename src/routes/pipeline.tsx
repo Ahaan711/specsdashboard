@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Plus, GitMerge, RefreshCw } from "lucide-react";
-import { syncPipelineOnly } from "@/lib/cloud-sync";
+import { pullDealsOverwrite } from "@/lib/cloud-sync";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -132,6 +132,7 @@ function PipelinePage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
   const [dragId, setDragId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     setDeals(loadDeals());
@@ -252,22 +253,30 @@ function PipelinePage() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              disabled={syncing}
               onClick={async () => {
-                const res = await syncPipelineOnly();
-                if (res.ok) {
-                  toast.success("Pipeline synced.");
-                  setDeals(loadDeals());
-                } else if (res.notProvisioned) {
-                  toast.warning("Cloud sync not provisioned yet — retry later.");
-                } else {
-                  toast.error(res.error || "Sync failed.");
+                setSyncing(true);
+                try {
+                  const res = await pullDealsOverwrite();
+                  if (res.ok) {
+                    setDeals(loadDeals());
+                    toast.success("Synced");
+                  } else if (res.notProvisioned) {
+                    toast.warning("Cloud sync not provisioned yet — retry later.");
+                  } else {
+                    toast.error(res.error || "Sync failed.");
+                  }
+                } catch (e) {
+                  toast.error((e as Error).message || "Sync failed.");
+                } finally {
+                  setSyncing(false);
                 }
               }}
-              className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium text-white/80 transition-colors hover:bg-[#16191F]"
+              className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium text-white/80 transition-colors hover:bg-[#16191F] disabled:opacity-60"
               style={{ borderColor: "#1E2229", backgroundColor: "#0E1117" }}
             >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Sync
+              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Syncing…" : "Sync"}
             </button>
             <Button
               onClick={() => setOpen(true)}
