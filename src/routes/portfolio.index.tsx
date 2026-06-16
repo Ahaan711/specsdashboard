@@ -8,7 +8,9 @@ import {
   formatCr,
   formatDate,
 } from "@/lib/portfolio-data";
-import { Plus, ChevronRight, AlertTriangle } from "lucide-react";
+import { pullCompaniesOverwrite } from "@/lib/cloud-sync";
+import { toast } from "sonner";
+import { Plus, ChevronRight, AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/portfolio/")({
