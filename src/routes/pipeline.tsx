@@ -132,6 +132,7 @@ function PipelinePage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
   const [dragId, setDragId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     setDeals(loadDeals());
