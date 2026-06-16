@@ -53,13 +53,40 @@ function PortfolioDashboard() {
             {totals.count} companies · {formatCr(totals.exposure)} total exposure
           </p>
         </div>
-        <Button
-          className="h-9 gap-1.5 bg-[#FF7553] text-[#0F1B2E] hover:bg-[#FF8E72]"
-          disabled
-          title="Add company flow — coming next"
-        >
-          <Plus className="h-4 w-4" /> Add Company
-        </Button>
+        <div className="flex items-center gap-2">
+          <button
+            disabled={syncing}
+            onClick={async () => {
+              setSyncing(true);
+              try {
+                const res = await pullCompaniesOverwrite();
+                if (res.ok) {
+                  setCompanies(loadCompanies());
+                  toast.success("Synced");
+                } else if (res.notProvisioned) {
+                  toast.warning("Cloud sync not provisioned yet — retry later.");
+                } else {
+                  toast.error(res.error || "Sync failed.");
+                }
+              } catch (e) {
+                toast.error((e as Error).message || "Sync failed.");
+              } finally {
+                setSyncing(false);
+              }
+            }}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 text-xs font-medium text-white/80 transition-colors hover:bg-white/10 disabled:opacity-60"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing…" : "Sync"}
+          </button>
+          <Button
+            className="h-9 gap-1.5 bg-[#FF7553] text-[#0F1B2E] hover:bg-[#FF8E72]"
+            disabled
+            title="Add company flow — coming next"
+          >
+            <Plus className="h-4 w-4" /> Add Company
+          </Button>
+        </div>
       </div>
 
       {/* KPI strip */}
