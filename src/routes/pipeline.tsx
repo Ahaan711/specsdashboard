@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Plus, GitMerge, RefreshCw } from "lucide-react";
-import { pullDealsOverwrite } from "@/lib/cloud-sync";
+import { pullDealsOverwrite, pushDeals } from "@/lib/cloud-sync";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -99,6 +99,59 @@ function loadDeals(): Deal[] {
 
 function saveDeals(deals: Deal[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(deals));
+}
+
+function normalizeLegacyLeads(leads: unknown[]): Deal[] {
+  if (!Array.isArray(leads)) return [];
+  return leads.map((l: any) => {
+    const id = l.id || crypto.randomUUID();
+    const company_name = l.company || l.company_name || l.companyName || "";
+    const sector = l.sector || "Other";
+    const deal_size_cr = Number(l.size || l.amount || 0) || 0;
+    const instrument_type = l.dealType || l.instrument || "NCD";
+    const stage = (l.stage as Stage) || (l.status as Stage) || "Origination";
+    const analyst = l.primaryPerson || l.analyst || "";
+    const source = l.referredBy || l.source || "";
+    const notes = l.notes || l.note || "";
+    const created_at = l.createdAt || l.updatedAt || new Date().toISOString();
+    const stage_entered_at = l.updatedAt || created_at;
+    return {
+      id,
+      company_name,
+      sector,
+      deal_size_cr,
+      instrument_type,
+      stage,
+      analyst,
+      source,
+      expected_close_date: l.expected_close_date || "",
+      notes,
+      stage_entered_at,
+      created_at,
+    };
+  });
+}
+
+async function fetchLegacySharedStateLeads(): Promise<Deal[]> {
+  const { data, error } = await supabase
+    .from("shared_state")
+    .select("key,value")
+    .in("key", ["app-state", "app_v1"]);
+
+  if (error) {
+    console.debug('[shared_state] fetch error', error.message);
+    return [];
+  }
+
+  const leads: Deal[] = [];
+  (data || []).forEach((row: any) => {
+    const value = row.value || row.value_json || row.payload || null;
+    if (!value) return;
+    const extractedLeads = value.leads || (value.value && value.value.leads) || [];
+    leads.push(...normalizeLegacyLeads(extractedLeads));
+  });
+
+  return leads;
 }
 
 function initials(name: string) {
@@ -203,9 +256,33 @@ function PipelinePage() {
       try {
         console.debug('[poll] checking for updates...');
         const res = await pullDealsOverwrite();
-        if (res.ok && !stopped) {
-          setDeals(loadDeals());
-          console.debug('[poll] pulled deals, total count=', loadDeals().length);
+        const legacyLeads = await fetchLegacySharedStateLeads();
+
+        const pipelineDeals = loadDeals();
+        const merged = new Map<string, Deal>(pipelineDeals.map((d) => [d.id, d]));
+        legacyLeads.forEach((lead) => {
+          const existing = merged.get(lead.id);
+          if (!existing) {
+            merged.set(lead.id, lead);
+            return;
+          }
+          const tExisting = +new Date(existing.created_at || 0) || 0;
+          const tLead = +new Date(lead.created_at || 0) || 0;
+          if (tLead > tExisting) merged.set(lead.id, lead);
+        });
+
+        const next = Array.from(merged.values()).sort((a, b) =>
+          a.created_at < b.created_at ? 1 : -1,
+        );
+        saveDeals(next);
+        if (!stopped) {
+          setDeals(next);
+        }
+
+        if (res.ok) {
+          console.debug('[poll] pulled pipeline deals, total count=', loadDeals().length);
+        } else {
+          console.debug('[poll] pipeline pull failed; merged legacy leads count=', legacyLeads.length);
         }
       } catch (err) {
         console.warn('[poll] error pulling deals', err);
@@ -337,7 +414,7 @@ function PipelinePage() {
     return m;
   }, [deals]);
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.company_name.trim()) return;
     const now = new Date().toISOString();
     const newDeal: Deal = {
@@ -359,9 +436,22 @@ function PipelinePage() {
     saveDeals(next);
     setForm({ ...emptyForm });
     setOpen(false);
+
+    try {
+      const pushRes = await pushDeals();
+      if (!pushRes.ok) {
+        toast.warning(
+          pushRes.notProvisioned
+            ? "Remote sync is not provisioned yet. Saved locally."
+            : `Saved locally, but remote push failed: ${pushRes.error}`,
+        );
+      }
+    } catch (err) {
+      console.warn("pushDeals error", err);
+    }
   }
 
-  function moveDeal(id: string, stage: Stage) {
+  async function moveDeal(id: string, stage: Stage) {
     const next = deals.map((d) =>
       d.id === id
         ? { ...d, stage, stage_entered_at: new Date().toISOString() }
@@ -369,6 +459,19 @@ function PipelinePage() {
     );
     setDeals(next);
     saveDeals(next);
+
+    try {
+      const pushRes = await pushDeals();
+      if (!pushRes.ok) {
+        toast.warning(
+          pushRes.notProvisioned
+            ? "Remote sync is not provisioned yet. Move saved locally."
+            : `Move saved locally, but remote push failed: ${pushRes.error}`,
+        );
+      }
+    } catch (err) {
+      console.warn("pushDeals error", err);
+    }
   }
 
   return (
