@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Plus, GitMerge, RefreshCw } from "lucide-react";
 import { pullDealsOverwrite } from "@/lib/cloud-sync";
 import { toast } from "sonner";
@@ -133,9 +134,183 @@ function PipelinePage() {
   const [form, setForm] = useState({ ...emptyForm });
   const [dragId, setDragId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   useEffect(() => {
     setDeals(loadDeals());
+  }, []);
+
+  // Realtime subscription: reflect remote INSERT/UPDATE/DELETE into local state/localStorage
+  useEffect(() => {
+    console.debug('[realtime:pipeline_deals] subscribing...');
+    // Subscribe to postgres changes on the pipeline_deals table
+    const channel = supabase
+      .channel("realtime:pipeline_deals")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "pipeline_deals" },
+        (payload: any) => {
+          console.debug('[realtime:pipeline_deals] event received', { eventType: payload.eventType || payload.type, payload });
+          const evt = payload.eventType || payload.type || payload.event;
+          // Row shape: { id, payload, updated_at }
+          const rowNew = payload.new ?? null;
+          const rowOld = payload.old ?? null;
+          if (evt === "INSERT" || evt === "UPDATE") {
+            const incoming = (rowNew && (rowNew.payload ?? rowNew)) as Deal;
+            if (!incoming) return;
+            console.debug('[realtime:pipeline_deals] merging deal:', incoming.id);
+            setDeals((prev) => {
+              const m = new Map(prev.map((d) => [d.id, d]));
+              m.set(incoming.id, incoming);
+              const next = Array.from(m.values()).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+              saveDeals(next);
+              return next;
+            });
+          } else if (evt === "DELETE") {
+            const removed = (rowOld && (rowOld.payload ?? rowOld)) as Deal | null;
+            if (!removed) return;
+            console.debug('[realtime:pipeline_deals] removing deal:', removed.id);
+            setDeals((prev) => {
+              const next = prev.filter((d) => d.id !== removed.id);
+              saveDeals(next);
+              return next;
+            });
+          }
+        },
+      )
+      .subscribe((status) => {
+        console.debug('[realtime:pipeline_deals] subscription status:', status);
+      });
+
+    return () => {
+      try {
+        console.debug('[realtime:pipeline_deals] unsubscribing');
+        supabase.removeChannel(channel);
+      } catch {
+        // best-effort cleanup
+        // channel.unsubscribe?.();
+      }
+    };
+  }, []);
+
+  // Polling fallback: pull latest deals every 15s in case realtime isn't available
+  useEffect(() => {
+    const POLL_INTERVAL_MS = 15000; // 15 seconds
+    let timer = 0;
+    let stopped = false;
+
+    const doPoll = async () => {
+      try {
+        console.debug('[poll] checking for updates...');
+        const res = await pullDealsOverwrite();
+        if (res.ok && !stopped) {
+          setDeals(loadDeals());
+          console.debug('[poll] pulled deals, total count=', loadDeals().length);
+        }
+      } catch (err) {
+        console.warn('[poll] error pulling deals', err);
+      }
+    };
+
+    // initial poll then interval
+    doPoll();
+    setLastSyncTime(new Date());
+    timer = window.setInterval(() => {
+      doPoll();
+      setLastSyncTime(new Date());
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      stopped = true;
+      if (timer) clearInterval(timer);
+    };
+  }, []);
+
+  // Also subscribe to legacy shared_state changes (pcf-app.html writes leads into shared_state.value.leads)
+  useEffect(() => {
+    console.debug('[realtime:shared_state] subscribing...');
+    const channel2 = supabase
+      .channel("realtime:shared_state")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "shared_state" },
+        (payload: any) => {
+          try {
+            console.debug('[realtime:shared_state] event received', { eventType: payload.eventType || payload.type, key: payload.new?.key });
+            const evt = payload.eventType || payload.type || payload.event;
+            const rowNew = payload.new ?? null;
+            if (!rowNew) return;
+            const key = rowNew.key;
+            if (!key) return;
+            // We're interested in the main app-state which may contain a 'leads' array
+            if (key !== "app-state" && key !== "app_v1") return;
+            const value = rowNew.value || rowNew.value_json || rowNew.payload || null;
+            if (!value) return;
+            const leads = value.leads || (value.value && value.value.leads) || [];
+            if (!Array.isArray(leads) || leads.length === 0) return;
+            console.debug('[realtime:shared_state] found leads:', leads.length);
+            // Map legacy lead shape into our Deal type where possible
+            const mapped: Deal[] = leads.map((l: any) => {
+              const id = l.id || crypto.randomUUID();
+              const company_name = l.company || l.company_name || l.companyName || "";
+              const sector = l.sector || "Other";
+              const deal_size_cr = Number(l.size || l.amount || 0) || 0;
+              const instrument_type = l.dealType || l.instrument || "NCD";
+              const stage = (l.stage as Stage) || (l.status as Stage) || "Origination";
+              const analyst = l.primaryPerson || l.analyst || "";
+              const source = l.referredBy || l.source || "";
+              const notes = l.notes || l.note || "";
+              const created_at = l.createdAt || l.updatedAt || new Date().toISOString();
+              const stage_entered_at = l.updatedAt || created_at;
+              return {
+                id,
+                company_name,
+                sector,
+                deal_size_cr,
+                instrument_type,
+                stage,
+                analyst,
+                source,
+                expected_close_date: l.expected_close_date || "",
+                notes,
+                stage_entered_at,
+                created_at,
+              } as Deal;
+            });
+
+            // Merge mapped leads into current deals
+            setDeals((prev) => {
+              const m = new Map(prev.map((d) => [d.id, d]));
+              mapped.forEach((d) => {
+                const cur = m.get(d.id);
+                if (!cur) {
+                  m.set(d.id, d);
+                  return;
+                }
+                const tCur = +new Date(cur.created_at || 0) || 0;
+                const tNew = +new Date(d.created_at || 0) || 0;
+                if (tNew > tCur) m.set(d.id, d);
+              });
+              const next = Array.from(m.values()).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+              saveDeals(next);
+              console.debug('[realtime:shared_state] merged leads, total deals now=', next.length);
+              return next;
+            });
+          } catch (err) {
+            console.warn('[realtime] shared_state handler error', err);
+          }
+        },
+      )
+      .subscribe((status) => {
+        console.debug('[realtime:shared_state] subscription status:', status);
+      });
+
+    return () => {
+      try {
+        console.debug('[realtime:shared_state] unsubscribing');
+        supabase.removeChannel(channel2);
+      } catch {}
+    };
   }, []);
 
   const stats = useMemo(() => {
@@ -252,32 +427,42 @@ function PipelinePage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              disabled={syncing}
-              onClick={async () => {
-                setSyncing(true);
-                try {
-                  const res = await pullDealsOverwrite();
-                  if (res.ok) {
-                    setDeals(loadDeals());
-                    toast.success("Synced");
-                  } else if (res.notProvisioned) {
-                    toast.warning("Cloud sync not provisioned yet — retry later.");
-                  } else {
-                    toast.error(res.error || "Sync failed.");
+            <div className="flex flex-col gap-1">
+              <button
+                disabled={syncing}
+                onClick={async () => {
+                  setSyncing(true);
+                  try {
+                    const res = await pullDealsOverwrite();
+                    const newDeals = loadDeals();
+                    setDeals(newDeals);
+                    setLastSyncTime(new Date());
+                    if (res.ok) {
+                      toast.success(`Synced — ${newDeals.length} deals loaded`);
+                    } else if (res.notProvisioned) {
+                      toast.warning("Cloud sync not provisioned yet — retry later.");
+                    } else {
+                      toast.error(res.error || "Sync failed.");
+                    }
+                  } catch (e) {
+                    toast.error((e as Error).message || "Sync failed.");
+                  } finally {
+                    setSyncing(false);
                   }
-                } catch (e) {
-                  toast.error((e as Error).message || "Sync failed.");
-                } finally {
-                  setSyncing(false);
-                }
-              }}
-              className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium text-white/80 transition-colors hover:bg-[#16191F] disabled:opacity-60"
-              style={{ borderColor: "#1E2229", backgroundColor: "#0E1117" }}
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
-              {syncing ? "Syncing…" : "Sync"}
-            </button>
+                }}
+                className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium text-white/80 transition-colors hover:bg-[#16191F] disabled:opacity-60"
+                style={{ borderColor: "#1E2229", backgroundColor: "#0E1117" }}
+                title="Pull latest deals from cloud (realtime or polling)"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+                {syncing ? "Syncing…" : "Sync"}
+              </button>
+              {lastSyncTime && (
+                <div className="text-[10px] text-white/40 px-3">
+                  Last: {lastSyncTime.toLocaleTimeString()}
+                </div>
+              )}
+            </div>
             <Button
               onClick={() => setOpen(true)}
               style={{ backgroundColor: "#C9A84C", color: "#0A0C10" }}
