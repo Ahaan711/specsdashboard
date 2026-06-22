@@ -426,43 +426,36 @@ function PipelinePage() {
               Drag deal cards between stages to update status
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex flex-col gap-1">
-              <button
-                disabled={syncing}
-                onClick={async () => {
-                  setSyncing(true);
-                  try {
-                    const res = await pullDealsOverwrite();
-                    const newDeals = loadDeals();
-                    setDeals(newDeals);
-                    setLastSyncTime(new Date());
-                    if (res.ok) {
-                      toast.success(`Synced — ${newDeals.length} deals loaded`);
-                    } else if (res.notProvisioned) {
-                      toast.warning("Cloud sync not provisioned yet — retry later.");
-                    } else {
-                      toast.error(res.error || "Sync failed.");
-                    }
-                  } catch (e) {
-                    toast.error((e as Error).message || "Sync failed.");
-                  } finally {
-                    setSyncing(false);
+          <div className="flex items-center gap-3">
+            <button
+              disabled={syncing}
+              onClick={async () => {
+                setSyncing(true);
+                try {
+                  const res = await pullDealsOverwrite();
+                  const newDeals = loadDeals();
+                  setDeals(newDeals);
+                  setLastSyncTime(new Date());
+                  if (res.ok) {
+                    toast.success(`Synced — ${newDeals.length} deals loaded`);
+                  } else if (res.notProvisioned) {
+                    toast.warning("Cloud sync not provisioned yet — retry later.");
+                  } else {
+                    toast.error(res.error || "Sync failed.");
                   }
-                }}
-                className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium text-white/80 transition-colors hover:bg-[#16191F] disabled:opacity-60"
-                style={{ borderColor: "#1E2229", backgroundColor: "#0E1117" }}
-                title="Pull latest deals from cloud (realtime or polling)"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
-                {syncing ? "Syncing…" : "Sync"}
-              </button>
-              {lastSyncTime && (
-                <div className="text-[10px] text-white/40 px-3">
-                  Last: {lastSyncTime.toLocaleTimeString()}
-                </div>
-              )}
-            </div>
+                } catch (e) {
+                  toast.error((e as Error).message || "Sync failed.");
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+              className="inline-flex h-10 items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: "#C9A84C", color: "#0A0C10" }}
+              title="Pull latest deals from cloud"
+            >
+              <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Syncing…" : "Sync Now"}
+            </button>
             <Button
               onClick={() => setOpen(true)}
               style={{ backgroundColor: "#C9A84C", color: "#0A0C10" }}
