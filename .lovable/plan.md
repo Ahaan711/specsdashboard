@@ -1,52 +1,13 @@
-## Goal
-Get the manual cloud sync working reliably so PortfolioOS and Deal Manager can push local changes to the hosted backend and pull them onto other machines.
+The backend says it is online, but direct database reads are still timing out, which is why the app keeps falling into its “cloud sync unavailable / not provisioned” path. The app is also treating several different backend failures as the same “not provisioned” message, so the UI cannot distinguish “tables missing” from “database temporarily unreachable.”
 
-## What’s blocking sync now
-- The frontend sync buttons are already wired.
-- The hosted backend is reachable, but database reads are timing out intermittently.
-- The sync schema/storage were never successfully provisioned, so the app falls back to “not provisioned yet.”
+Plan:
+1. Re-check the database once the connection responds, specifically for `portfolio_companies` and `pipeline_deals`.
+2. If the tables are missing, add a migration to create them with the required access grants and user-scoped security rules.
+3. If the tables exist but access fails, add/fix the required grants and policies so authenticated users can read/write their sync data.
+4. Update the sync error handling so connection timeouts show a clearer error, while true missing-table cases still say sync is not provisioned.
+5. Verify with a fresh read query and then test the Portfolio/Pipeline Sync buttons.
 
-## Plan
-
-### 1. Provision the backend objects the sync code expects
-Create the missing backend pieces in one pass:
-- `portfolio_companies` for PortfolioOS records
-- `pipeline_deals` for Deal Manager records
-- `portfolio_documents` for uploaded term sheets / MIS metadata
-- `portfolio-docs` storage bucket for the actual files
-- access rules so the app can read/write these safely
-
-### 2. Verify provisioning before touching app behavior
-After the migration succeeds, verify:
-- all three tables exist
-- the storage bucket exists
-- the app can read and write a test row/file without timing out
-
-### 3. Re-test the current manual sync flow end to end
-Validate the existing buttons already added:
-- PortfolioOS Sync: push local companies, pull latest cloud copy
-- Deal Manager Sync: push/pull deals
-- Documents tab: list metadata and download uploaded files
-- term sheet / MIS uploads: archive file + create document metadata row
-
-### 4. Fix merge reliability if needed
-If sync still feels inconsistent after provisioning, tighten the data merge logic:
-- prefer newest `updated_at` instead of blind last-write wins
-- avoid local stale data overwriting fresher cloud data
-- return clearer per-module sync results (companies, deals, documents)
-
-### 5. Handle backend flakiness gracefully
-If the hosted database keeps timing out even after provisioning:
-- add retry/backoff around sync operations
-- show a more specific UI message when the backend is temporarily unavailable
-- if the backend instance is overloaded, recommend checking Cloud instance sizing/status in the backend panel
-
-## Expected outcome
-- Manual push/pull sync works on both PortfolioOS and Deal Manager
-- Uploaded term sheets and MIS files appear in Documents with metadata + download
-- Changes made on one laptop become available on another after pressing Sync
-
-## Technical notes
-- This is primarily a backend provisioning issue, not a missing-button issue.
-- The current frontend work should start functioning as soon as the tables and storage bucket exist and are reachable.
-- If the migration service is healthy on the next attempt, this should be a straightforward repair rather than a redesign.
+Technical notes:
+- No UI redesign is needed.
+- The current frontend Sync buttons are wired to `portfolio_companies` and `pipeline_deals`.
+- The likely blocker is backend schema/access or a transient database connectivity issue, not the button code.

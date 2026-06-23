@@ -43,9 +43,22 @@ function isMissing(err: { code?: string; message?: string } | null | undefined) 
   const m = (err.message || "").toLowerCase();
   return (
     m.includes("does not exist") ||
-    m.includes("not found") ||
     m.includes("could not find the table") ||
     m.includes("bucket not found")
+  );
+}
+
+function isUnreachable(err: { code?: string; message?: string } | null | undefined) {
+  if (!err) return false;
+  const m = (err.message || "").toLowerCase();
+  return (
+    m.includes("failed to fetch") ||
+    m.includes("networkerror") ||
+    m.includes("timeout") ||
+    m.includes("timed out") ||
+    m.includes("connection") ||
+    m.includes("econnrefused") ||
+    m.includes("fetch failed")
   );
 }
 
