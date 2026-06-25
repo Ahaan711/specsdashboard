@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "db:migrate:shared_state": "node ./scripts/run_sql.js supabase/migrations/20260622_create_shared_state.sql"
+    "db:migrate:shared_state": "node ./scripts/run_sql.js supabase/migrations/20260622_create_shared_state.sql",
+    "db:migrate:sync_tables": "node ./scripts/run_sql.js supabase/migrations/20260625120000_create_sync_tables.sql"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
