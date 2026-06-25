@@ -4,7 +4,7 @@
 // Designed to fail gracefully if the migration hasn't been applied yet:
 // every helper returns { ok, error?, notProvisioned? } and never throws.
 
-import { supabase as supabaseTyped } from "@/integrations/supabase/client";
+import { syncSupabase as supabaseTyped } from "@/integrations/sync-supabase/client";
 import {
   loadCompanies,
   saveCompanies,
