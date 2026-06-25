@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { resetSeed, loadCompanies } from "@/lib/portfolio-data";
 import {
   listDocuments,
-  getDocumentPublicUrl,
+  getDocumentSignedUrl,
   type DocumentRow,
 } from "@/lib/cloud-sync";
 import { toast } from "sonner";
@@ -165,16 +165,21 @@ function DocumentsTab() {
                     {new Date(d.uploaded_at).toLocaleString()}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <a
-                      href={getDocumentPublicUrl(d.storage_path)}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={async () => {
+                        const url = await getDocumentSignedUrl(d.storage_path);
+                        if (url) {
+                          window.open(url, "_blank", "noopener,noreferrer");
+                        } else {
+                          toast.error("Couldn't generate a download link.");
+                        }
+                      }}
                       className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-white/80 hover:bg-[#1C3151]"
                       style={{ borderColor: "#1A2B47" }}
                     >
                       <Download className="h-3 w-3" />
                       Download
-                    </a>
+                    </button>
                   </td>
                 </tr>
               ))}
