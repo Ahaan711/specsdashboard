@@ -995,21 +995,49 @@ function _applyDocumentsFromCloud(docs, opts){
 function _hydrateFrom(payload, opts){
   opts = opts || {};
   if(!payload || typeof payload !== 'object') return;
-  const incomingRev = +payload._rev || 0;
-  if(!opts.force && incomingRev && incomingRev < _localRev) return;
-  if(incomingRev) _localRev = Math.max(_localRev, incomingRev);
-  if(incomingRev) _lastHydratedRev = Math.max(_lastHydratedRev, incomingRev);
-  // Tombstones merge first (union by id, newest deletedAt wins) so the
-  // leads merge below has the full picture before filtering.
-  if(Array.isArray(payload.deletedLeadIds)){
+
+  // Tombstones apply unconditionally, BEFORE the staleness check below.
+  // Deletions must always win once any device has seen them -- gating this
+  // behind the same _rev check as content merges was the actual bug: a
+  // device whose own _localRev had outpaced an incoming payload's _rev would
+  // silently ignore every deletion from other devices forever (the early
+  // return below used to skip this whole function), then re-push its own
+  // lead-still-present snapshot on its next save, undoing the delete in the
+  // cloud too.
+  let tombstonesChanged = false;
+  if(Array.isArray(payload.deletedLeadIds) && payload.deletedLeadIds.length){
     const tMap = new Map((state.deletedLeadIds||[]).map(t=>[t.id, t]));
     payload.deletedLeadIds.forEach(t=>{
       if(!t || !t.id) return;
       const cur = tMap.get(t.id);
-      if(!cur || +new Date(t.deletedAt||0) > +new Date(cur.deletedAt||0)) tMap.set(t.id, t);
+      if(!cur || +new Date(t.deletedAt||0) > +new Date(cur.deletedAt||0)){
+        tMap.set(t.id, t);
+        tombstonesChanged = true;
+      }
     });
-    state.deletedLeadIds = Array.from(tMap.values());
+    if(tombstonesChanged) state.deletedLeadIds = Array.from(tMap.values());
   }
+  if(state.deletedLeadIds && state.deletedLeadIds.length && state.leads && state.leads.length){
+    const tMap = new Map(state.deletedLeadIds.map(t=>[t.id, t]));
+    const before = state.leads.length;
+    state.leads = state.leads.filter(l=>{
+      const t = tMap.get(l.id);
+      if(!t) return true;
+      const deletedAt = +new Date(t.deletedAt||0)||0;
+      const touchedAt = +new Date(l.updatedAt||l.rejectedAt||0)||0;
+      return touchedAt > deletedAt;
+    });
+    if(state.leads.length !== before) tombstonesChanged = true;
+  }
+  if(tombstonesChanged){
+    _persistLocalState();
+    if(_cloudReady) cloudPushDebounced();
+  }
+
+  const incomingRev = +payload._rev || 0;
+  if(!opts.force && incomingRev && incomingRev < _localRev) return;
+  if(incomingRev) _localRev = Math.max(_localRev, incomingRev);
+  if(incomingRev) _lastHydratedRev = Math.max(_lastHydratedRev, incomingRev);
   // Merge by id so an incoming remote snapshot cannot wipe locally-edited
   // or locally-added entries that haven't been pushed yet.
   if(Array.isArray(payload.leads)){
