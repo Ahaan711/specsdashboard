@@ -33,3 +33,8 @@ dist-ssr
 
 # Local Netlify folder
 .netlify
+
+# Environment variables (contains live Supabase credentials)
+.env
+.env.*
+!.env.example
