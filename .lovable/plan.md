@@ -1,13 +1,30 @@
-The backend says it is online, but direct database reads are still timing out, which is why the app keeps falling into its “cloud sync unavailable / not provisioned” path. The app is also treating several different backend failures as the same “not provisioned” message, so the UI cannot distinguish “tables missing” from “database temporarily unreachable.”
+## Goal
+Point cloud sync at your own Supabase project (`jszniaaiuagasiyewnyy`) instead of Lovable Cloud, so Sync actually works.
 
-Plan:
-1. Re-check the database once the connection responds, specifically for `portfolio_companies` and `pipeline_deals`.
-2. If the tables are missing, add a migration to create them with the required access grants and user-scoped security rules.
-3. If the tables exist but access fails, add/fix the required grants and policies so authenticated users can read/write their sync data.
-4. Update the sync error handling so connection timeouts show a clearer error, while true missing-table cases still say sync is not provisioned.
-5. Verify with a fresh read query and then test the Portfolio/Pipeline Sync buttons.
+## Approach
+Create a second, dedicated Supabase client just for sync (companies + deals + documents). The existing Lovable Cloud client stays in place for auth and anything else — only `cloud-sync.ts` switches over.
 
-Technical notes:
-- No UI redesign is needed.
-- The current frontend Sync buttons are wired to `portfolio_companies` and `pipeline_deals`.
-- The likely blocker is backend schema/access or a transient database connectivity issue, not the button code.
+## Steps
+
+1. **Store your credentials as secrets** (not hardcoded), exposed to the browser as Vite env vars:
+   - `VITE_SYNC_SUPABASE_URL` = `https://jszniaaiuagasiyewnyy.supabase.co`
+   - `VITE_SYNC_SUPABASE_PUBLISHABLE_KEY` = `sb_publishable_BmWqTF3bwTqmuXBXnKdjew_kJYQp8k0`
+
+2. **New file `src/integrations/sync-supabase/client.ts`** — a standalone `createClient` using those env vars, with its own `storageKey` (`sync-auth`) so it doesn't collide with the Lovable Cloud client's localStorage session.
+
+3. **Update `src/lib/cloud-sync.ts`** to import from the new sync client instead of `@/integrations/supabase/client`. No logic changes to push/pull/overwrite functions.
+
+4. **Schema for your Supabase project** — I can't run migrations against a project I don't manage, so I'll give you the SQL to paste into your project's SQL editor once. It creates:
+   - `portfolio_companies (id uuid pk, payload jsonb, updated_at timestamptz)`
+   - `pipeline_deals (id uuid pk, payload jsonb, updated_at timestamptz)`
+   - `portfolio_documents (...)` + `portfolio-docs` storage bucket
+   - Permissive RLS (anon read/write) since the app currently has no per-user auth on sync data. If you want it locked to signed-in users later, say the word and I'll switch policies to `auth.uid()`-scoped.
+
+5. **Verify**: click Sync on Portfolio and Pipeline pages, confirm "Synced" toast and that data round-trips after a hard reload.
+
+## Open question
+The current app stores companies/deals as a single shared dataset (no per-user filtering). For your own Supabase, do you want:
+- **(A)** Same model — one shared dataset, anon key can read/write everything (simple, matches today).
+- **(B)** Per-user — require login on the sync side, scope rows to the signed-in user.
+
+I'll default to **(A)** unless you say otherwise.
