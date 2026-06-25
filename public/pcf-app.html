@@ -869,7 +869,7 @@
 /* =========================================================
    STATE & PERSISTENCE
    ========================================================= */
-const KEYS = { leads:'pcf_leads', deals:'pcf_deals', cashflows:'pcf_cashflows', fund:'pcf_fund', distributions:'pcf_distributions', documents:'pcf_documents', rev:'pcf_state_rev' };
+const KEYS = { leads:'pcf_leads', deals:'pcf_deals', cashflows:'pcf_cashflows', fund:'pcf_fund', distributions:'pcf_distributions', documents:'pcf_documents', rev:'pcf_state_rev', deletedLeads:'pcf_deleted_leads' };
 let state = {
   leads: JSON.parse(localStorage.getItem(KEYS.leads) || '[]'),
   deals: JSON.parse(localStorage.getItem(KEYS.deals) || '[]'),
@@ -877,6 +877,11 @@ let state = {
   fund: JSON.parse(localStorage.getItem(KEYS.fund) || '{"commitment":0,"drawn":0,"cashAvailable":0,"cashYield":0}'),
   distributions: JSON.parse(localStorage.getItem(KEYS.distributions) || '[]'),
   documents: JSON.parse(localStorage.getItem(KEYS.documents) || '[]'),
+  // Tombstones: {id, deletedAt} for every deleted lead. Without this, a
+  // merge from any device that still has the lead locally will silently
+  // resurrect it -- see _mergeById and the tombstone-filtering step in
+  // _hydrateFrom below.
+  deletedLeadIds: JSON.parse(localStorage.getItem(KEYS.deletedLeads) || '[]'),
 };
 let _localRev = +(localStorage.getItem(KEYS.rev) || '0') || 0;
 let _storageWarningShown = false;
@@ -888,6 +893,7 @@ function _persistLocalState(){
     localStorage.setItem(KEYS.fund, JSON.stringify(state.fund));
     localStorage.setItem(KEYS.distributions, JSON.stringify(state.distributions));
     localStorage.setItem(KEYS.documents, JSON.stringify(state.documents));
+    localStorage.setItem(KEYS.deletedLeads, JSON.stringify(state.deletedLeadIds||[]));
     localStorage.setItem(KEYS.rev, String(_localRev));
     return true;
   }catch(err){
@@ -950,6 +956,7 @@ let _creditsWarned = false;
 function _stateSnapshot(){
   return { leads:state.leads, deals:state.deals, cashflows:state.cashflows,
            fund:state.fund, distributions:state.distributions,
+           deletedLeadIds: state.deletedLeadIds||[],
            _client: CLIENT_ID, _ts: Date.now(), _rev: _localRev,
            _documentCount: (state.documents||[]).length };
 }
@@ -992,11 +999,33 @@ function _hydrateFrom(payload, opts){
   if(!opts.force && incomingRev && incomingRev < _localRev) return;
   if(incomingRev) _localRev = Math.max(_localRev, incomingRev);
   if(incomingRev) _lastHydratedRev = Math.max(_lastHydratedRev, incomingRev);
+  // Tombstones merge first (union by id, newest deletedAt wins) so the
+  // leads merge below has the full picture before filtering.
+  if(Array.isArray(payload.deletedLeadIds)){
+    const tMap = new Map((state.deletedLeadIds||[]).map(t=>[t.id, t]));
+    payload.deletedLeadIds.forEach(t=>{
+      if(!t || !t.id) return;
+      const cur = tMap.get(t.id);
+      if(!cur || +new Date(t.deletedAt||0) > +new Date(cur.deletedAt||0)) tMap.set(t.id, t);
+    });
+    state.deletedLeadIds = Array.from(tMap.values());
+  }
   // Merge by id so an incoming remote snapshot cannot wipe locally-edited
   // or locally-added entries that haven't been pushed yet.
   if(Array.isArray(payload.leads)){
     const remote = payload.leads.map(l=>l&&l.stage==='Completed'?{...l,stage:'Closed'}:l);
-    state.leads = opts.force ? remote : _mergeById(state.leads, remote);
+    const merged = opts.force ? remote : _mergeById(state.leads, remote);
+    // Drop anything with a tombstone, UNLESS it was touched again after the
+    // delete was recorded (i.e. someone intentionally revived/re-added it
+    // post-deletion -- a newer updatedAt than the tombstone wins).
+    const tMap = new Map((state.deletedLeadIds||[]).map(t=>[t.id, t]));
+    state.leads = merged.filter(l=>{
+      const t = tMap.get(l.id);
+      if(!t) return true;
+      const deletedAt = +new Date(t.deletedAt||0)||0;
+      const touchedAt = +new Date(l.updatedAt||l.rejectedAt||0)||0;
+      return touchedAt > deletedAt;
+    });
   }
   if(Array.isArray(payload.deals)) state.deals = opts.force ? payload.deals.slice() : _mergeById(state.deals, payload.deals);
   if(payload.cashflows && typeof payload.cashflows==='object') state.cashflows = opts.force ? {...payload.cashflows} : { ...(state.cashflows||{}), ...payload.cashflows };
@@ -2011,7 +2040,10 @@ function quickChangeStage(id){
 }
 function delLead(id){
   if(!confirm('Delete this lead?')) return;
-  state.leads = state.leads.filter(x=>x.id!==id); save(); renderLeads();
+  state.leads = state.leads.filter(x=>x.id!==id);
+  state.deletedLeadIds = state.deletedLeadIds || [];
+  state.deletedLeadIds.push({ id, deletedAt: new Date().toISOString() });
+  save(); renderLeads();
   try{ renderRejected(); renderReevalBanner(); }catch(_){ }
 }
 function convertLead(id){
@@ -2072,7 +2104,11 @@ function saveDeal(e){
   state.cashflows[obj.id] = g.schedule;
   // mark lead converted
   const fromLead = e.target.dataset.fromLead;
-  if(fromLead){ state.leads = state.leads.filter(l=>l.id!==fromLead); }
+  if(fromLead){
+    state.leads = state.leads.filter(l=>l.id!==fromLead);
+    state.deletedLeadIds = state.deletedLeadIds || [];
+    state.deletedLeadIds.push({ id: fromLead, deletedAt: new Date().toISOString() });
+  }
   save(); closeModal('dealModal'); renderPortfolio(); renderLeads(); toast('Deal saved');
 }
 function editDeal(id){
