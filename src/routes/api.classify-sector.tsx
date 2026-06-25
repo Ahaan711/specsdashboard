@@ -1,23 +1,79 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+// Keep this list identical to the `Sector` union in src/lib/portfolio-data.ts.
+// (The old version of this file had its own, completely different sector
+// list that didn't match the app's actual data model — fixed here too.)
 const SECTORS = [
-  "Real Estate",
-  "Infrastructure",
-  "Corporate",
-  "SME",
-  "Specialty Finance",
-  "NBFC / Lending",
-  "Fintech",
-  "Consumer",
-  "Agritech",
-  "Healthcare",
-  "Logistics",
-  "EdTech",
-  "Manufacturing",
-  "Technology / SaaS",
+  "NBFC",
   "Renewable Energy",
+  "Solar PV Mfg",
+  "rPET Recycling",
+  "AIF",
+  "Manufacturing",
+  "Infrastructure",
   "Other",
+] as const;
+
+type Sector = (typeof SECTORS)[number];
+type Confidence = "high" | "low";
+
+// Deterministic keyword classifier — no external AI call.
+//
+// The previous version called Lovable's AI gateway (ai.gateway.lovable.dev)
+// using process.env.LOVABLE_API_KEY. That key is auto-injected only inside
+// Lovable's own hosting; it was never set anywhere on Netlify, so apiKey was
+// always undefined and this route 500'd on every request. This has zero
+// external dependency, so it works identically on Netlify, Lovable, or
+// anywhere else. `confidence` is "low" for the fallback bucket so the UI can
+// flag it for manual review.
+//
+// `whole` keywords match as a whole word only (avoids e.g. "aif" matching
+// inside "Saify"). `stem` keywords match as a plain substring, intentionally,
+// so "manufactur" also catches "Manufacturing" / "Manufacturers" / etc.
+const RULES: Array<{ sector: Sector; whole?: string[]; stem?: string[] }> = [
+  { sector: "Solar PV Mfg", whole: ["pv"], stem: ["solar", "photovoltaic", "module manufactur"] },
+  { sector: "rPET Recycling", stem: ["rpet", "r-pet", "recycl"] },
+  {
+    sector: "Renewable Energy",
+    stem: ["renewable", "wind energy", "wind power", "hydro power", "green energy", "clean energy"],
+  },
+  {
+    sector: "NBFC",
+    whole: ["nbfc"],
+    stem: ["financ", "microfinance", "housing finance", "leasing", "lending", "credit"],
+  },
+  { sector: "AIF", whole: ["aif"], stem: ["alternative investment fund"] },
+  {
+    sector: "Infrastructure",
+    whole: ["ports"],
+    stem: ["infra", "logistics", "highway", "warehous", "transport", "supply chain", "roadways"],
+  },
+  {
+    sector: "Manufacturing",
+    stem: [
+      "manufactur", "industries", "industrial", "engineering", "mills",
+      "steel", "cement", "textile", "chemicals", "petroleum", "lubricant",
+      "plastics", "auto components", "pharma", "fmcg", "foods", "agro",
+    ],
+  },
 ];
+
+function matchesWhole(name: string, keyword: string): boolean {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`, "i").test(name);
+}
+
+function classify(company: string): { sector: Sector; confidence: Confidence } {
+  const name = company.toLowerCase();
+  for (const rule of RULES) {
+    const wholeHit = rule.whole?.some((kw) => matchesWhole(name, kw));
+    const stemHit = rule.stem?.some((kw) => name.includes(kw));
+    if (wholeHit || stemHit) {
+      return { sector: rule.sector, confidence: "high" };
+    }
+  }
+  return { sector: "Other", confidence: "low" };
+}
 
 export const Route = createFileRoute("/api/classify-sector")({
   server: {
@@ -43,77 +99,8 @@ export const Route = createFileRoute("/api/classify-sector")({
             });
           }
 
-          const apiKey = process.env.LOVABLE_API_KEY;
-          if (!apiKey) {
-            return new Response(JSON.stringify({ error: "AI service unavailable" }), {
-              status: 500,
-              headers: cors,
-            });
-          }
-
-          const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "google/gemini-3-flash-preview",
-              messages: [
-                {
-                  role: "system",
-                  content:
-                    "You are a financial analyst classifying Indian companies into one industry sector. Respond ONLY by calling the classify_sector tool.",
-                },
-                {
-                  role: "user",
-                  content: `Classify this company into the most appropriate sector: "${company}"`,
-                },
-              ],
-              tools: [
-                {
-                  type: "function",
-                  function: {
-                    name: "classify_sector",
-                    description: "Return the best-fit sector for the company.",
-                    parameters: {
-                      type: "object",
-                      properties: {
-                        sector: { type: "string", enum: SECTORS },
-                        confidence: { type: "string", enum: ["high", "medium", "low"] },
-                      },
-                      required: ["sector", "confidence"],
-                      additionalProperties: false,
-                    },
-                  },
-                },
-              ],
-              tool_choice: { type: "function", function: { name: "classify_sector" } },
-            }),
-          });
-
-          if (!res.ok) {
-            const t = await res.text();
-            console.error(`AI gateway error ${res.status}:`, t);
-            return new Response(
-              JSON.stringify({ error: "Upstream AI service error" }),
-              { status: res.status === 429 || res.status === 402 ? res.status : 502, headers: cors },
-            );
-          }
-
-          const data = await res.json();
-          const args = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-          let parsed: { sector?: string; confidence?: string } = {};
-          try {
-            parsed = typeof args === "string" ? JSON.parse(args) : args || {};
-          } catch {
-            // ignore
-          }
-          const sector = SECTORS.includes(parsed.sector || "") ? parsed.sector : "Other";
-          return new Response(
-            JSON.stringify({ sector, confidence: parsed.confidence || "low" }),
-            { headers: cors },
-          );
+          const result = classify(company.trim());
+          return new Response(JSON.stringify(result), { headers: cors });
         } catch (e) {
           console.error("classify-sector error:", e);
           return new Response(
