@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { syncSupabase } from "@/integrations/sync-supabase/client";
 import { ArrowLeft, Plus, GitMerge, RefreshCw } from "lucide-react";
 import { pullDealsOverwrite, pushDeals } from "@/lib/cloud-sync";
 import { toast } from "sonner";
@@ -197,7 +198,7 @@ function PipelinePage() {
   useEffect(() => {
     console.debug('[realtime:pipeline_deals] subscribing...');
     // Subscribe to postgres changes on the pipeline_deals table
-    const channel = supabase
+    const channel = syncSupabase
       .channel("realtime:pipeline_deals")
       .on(
         "postgres_changes",
@@ -238,7 +239,7 @@ function PipelinePage() {
     return () => {
       try {
         console.debug('[realtime:pipeline_deals] unsubscribing');
-        supabase.removeChannel(channel);
+        syncSupabase.removeChannel(channel);
       } catch {
         // best-effort cleanup
         // channel.unsubscribe?.();
