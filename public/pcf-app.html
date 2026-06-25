@@ -944,6 +944,9 @@ let _cloudPushInFlight = false;
 let _cloudPullInFlight = false;
 let _cloudRetryTimer = null;
 let _cloudPollTimer = null;
+let _marketNewsInFlight = new Set();
+let _marketNewsFailedAt = new Map();
+let _creditsWarned = false;
 function _stateSnapshot(){
   return { leads:state.leads, deals:state.deals, cashflows:state.cashflows,
            fund:state.fund, distributions:state.distributions,
@@ -3049,9 +3052,16 @@ function renderRejected(){
   if(!items.length){ grid.innerHTML = '<div class="empty" style="grid-column:1/-1">No rejected companies match these filters.</div>'; return; }
   grid.innerHTML = items.map(l=>_renderRejCard(l)).join('');
   // auto-fetch news for cards that haven't been refreshed in 7 days
+  // (skip if already in flight, or if it failed within the last 6h — see
+  // fetchMarketNews. Without this guard, every render of this tab re-fired
+  // a fetch for every stale company, and a persistent failure — e.g. AI
+  // credits exhausted — meant it never stopped retrying.)
   items.forEach(l=>{
     const last = l.marketNewsFetchedAt ? new Date(l.marketNewsFetchedAt).getTime() : 0;
-    if(Date.now() - last > 7*86400000){ fetchMarketNews(l.id, true); }
+    const lastFail = _marketNewsFailedAt.get(l.id) || 0;
+    const stale = Date.now() - last > 7*86400000;
+    const recentlyFailed = Date.now() - lastFail < 6*3600000;
+    if(stale && !recentlyFailed && !_marketNewsInFlight.has(l.id)){ fetchMarketNews(l.id, true); }
   });
 }
 function _renderRejCard(l){
@@ -3112,26 +3122,36 @@ function toggleReevaluate(id){
 }
 async function fetchMarketNews(id, silent){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
+  if(_marketNewsInFlight.has(id)) return;
+  _marketNewsInFlight.add(id);
   if(!silent) toast('Fetching news for '+l.company+'…');
   try{
     const r = await fetch(`${SUPABASE_URL}/functions/v1/fetch-market-news`, {
       method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON_KEY}`},
       body: JSON.stringify({ company: l.company })
     });
-    if(!r.ok){ if(!silent) toast('News fetch failed'); return; }
+    if(!r.ok){
+      _marketNewsFailedAt.set(id, Date.now());
+      if(r.status === 402){
+        if(!_creditsWarned){ _creditsWarned = true; toast('⚠ AI credits exhausted — market news paused until you top up Lovable AI credits.'); }
+      } else if(!silent){ toast('News fetch failed'); }
+      return;
+    }
     const data = await r.json();
     const fetched = (data.news||[]).map(n=>({...n, manual:false}));
     // merge with manual entries
     const manual = (l.marketNews||[]).filter(n=>n.manual);
     l.marketNews = [...fetched, ...manual].sort((a,b)=> (b.date||'').localeCompare(a.date||''));
     l.marketNewsFetchedAt = new Date().toISOString();
+    _marketNewsFailedAt.delete(id);
     // auto-extract co-investors
     const inv = new Set(l.coInvestors||[]);
     fetched.forEach(n=>(n.investors||[]).forEach(i=>i && inv.add(i)));
     l.coInvestors = [...inv];
     save(); renderRejected();
     if(!silent) toast('News updated');
-  }catch(e){ console.error(e); if(!silent) toast('News fetch error'); }
+  }catch(e){ console.error(e); _marketNewsFailedAt.set(id, Date.now()); if(!silent) toast('News fetch error'); }
+  finally{ _marketNewsInFlight.delete(id); }
 }
 async function refreshAllMarketNews(){
   const items = (state.leads||[]).filter(_isRejected);
