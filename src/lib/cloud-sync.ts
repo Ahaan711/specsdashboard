@@ -62,6 +62,19 @@ function isUnreachable(err: { code?: string; message?: string } | null | undefin
   );
 }
 
+// Shared error-shaping for every push/pull/upload call below. Distinguishes
+// "tables not provisioned" (isMissing) from "can't reach the project at all"
+// (isUnreachable, e.g. a Supabase free-tier project that auto-paused after
+// being idle) instead of surfacing both as the same generic message.
+function errorFields(err: { code?: string; message?: string } | null | undefined) {
+  return {
+    error: isUnreachable(err)
+      ? "Can't reach the cloud database. If this Supabase project has been idle, it may have auto-paused (free tier pauses after a period of inactivity) — open supabase.com/dashboard to check and restore it, then retry."
+      : err?.message,
+    notProvisioned: isMissing(err),
+  };
+}
+
 // ---------------- Companies ----------------
 export async function pushCompanies(): Promise<Result> {
   const list = loadCompanies();
@@ -75,7 +88,7 @@ export async function pushCompanies(): Promise<Result> {
     .from("portfolio_companies")
     .upsert(rows, { onConflict: "id" });
   if (error) {
-    return { ok: false, error: error.message, notProvisioned: isMissing(error) };
+    return { ok: false, ...errorFields(error) };
   }
   return { ok: true };
 }
@@ -85,7 +98,7 @@ export async function pullCompanies(): Promise<Result> {
     .from("portfolio_companies")
     .select("payload");
   if (error) {
-    return { ok: false, error: error.message, notProvisioned: isMissing(error) };
+    return { ok: false, ...errorFields(error) };
   }
   if (!data || data.length === 0) return { ok: true };
   const local = loadCompanies();
@@ -126,7 +139,7 @@ export async function pushDeals(): Promise<Result> {
     .from("pipeline_deals")
     .upsert(rows, { onConflict: "id" });
   if (error) {
-    return { ok: false, error: error.message, notProvisioned: isMissing(error) };
+    return { ok: false, ...errorFields(error) };
   }
   return { ok: true };
 }
@@ -136,7 +149,7 @@ export async function pullDeals(): Promise<Result> {
     .from("pipeline_deals")
     .select("payload");
   if (error) {
-    return { ok: false, error: error.message, notProvisioned: isMissing(error) };
+    return { ok: false, ...errorFields(error) };
   }
   if (!data) return { ok: true };
   const local = loadDealsLocal();
@@ -153,7 +166,7 @@ export async function pullCompaniesOverwrite(): Promise<Result<Company[]>> {
     .from("portfolio_companies")
     .select("payload");
   if (error) {
-    return { ok: false, error: error.message, notProvisioned: isMissing(error) };
+    return { ok: false, ...errorFields(error) };
   }
   const list = (data || []).map((row: { payload: Company }) => row.payload);
   saveCompanies(list);
@@ -166,7 +179,7 @@ export async function pullDealsOverwrite(): Promise<Result<Deal[]>> {
     .from("pipeline_deals")
     .select("payload");
   if (error) {
-    return { ok: false, error: error.message, notProvisioned: isMissing(error) };
+    return { ok: false, ...errorFields(error) };
   }
   const list = (data || []).map((row: { payload: Deal }) => row.payload);
   saveDealsLocal(list);
@@ -221,7 +234,7 @@ export async function uploadDocument(
     upsert: false,
   });
   if (up.error) {
-    return { ok: false, error: up.error.message, notProvisioned: isMissing(up.error) };
+    return { ok: false, ...errorFields(up.error) };
   }
   const row = {
     company_id: meta.companyId ?? null,
@@ -238,7 +251,7 @@ export async function uploadDocument(
     .select()
     .single();
   if (ins.error) {
-    return { ok: false, error: ins.error.message, notProvisioned: isMissing(ins.error) };
+    return { ok: false, ...errorFields(ins.error) };
   }
   return { ok: true, data: ins.data as DocumentRow };
 }
@@ -249,12 +262,24 @@ export async function listDocuments(): Promise<Result<DocumentRow[]>> {
     .select("*")
     .order("uploaded_at", { ascending: false });
   if (error) {
-    return { ok: false, error: error.message, notProvisioned: isMissing(error) };
+    return { ok: false, ...errorFields(error) };
   }
   return { ok: true, data: (data || []) as DocumentRow[] };
 }
 
-export function getDocumentPublicUrl(storagePath: string): string {
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(storagePath);
-  return data.publicUrl;
+// Bucket is private — generate a short-lived signed URL on demand rather
+// than a public URL, since this bucket holds term sheets, MIS, and pre-DD
+// notes that shouldn't be reachable by anyone who has the file path.
+export async function getDocumentSignedUrl(
+  storagePath: string,
+  expiresInSeconds = 3600,
+): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(storagePath, expiresInSeconds);
+  if (error || !data) {
+    console.error("getDocumentSignedUrl error:", error);
+    return null;
+  }
+  return data.signedUrl;
 }
