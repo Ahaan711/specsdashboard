@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
-import { resetSeed, loadCompanies } from "@/lib/portfolio-data";
+import { loadCompanies } from "@/lib/portfolio-data";
 import {
   listDocuments,
   getDocumentSignedUrl,
@@ -39,25 +38,6 @@ function SettingsPage() {
               Currently storing{" "}
               <span className="font-mono text-[#FF7553]">{count}</span> companies in
               browser localStorage.
-            </div>
-            <div className="mt-3 flex gap-2">
-              <Button
-                variant="outline"
-                className="border-[#1A2B47] bg-transparent text-white hover:bg-[#1C3151]"
-                onClick={() => {
-                  resetSeed();
-                  setCount(loadCompanies().length);
-                  toast.success("Seed data reset.");
-                }}
-              >
-                Reset to Seed
-              </Button>
-            </div>
-          </Card>
-
-          <Card title="AI">
-            <div className="text-sm text-white/70">
-              Document parsing uses Lovable AI Gateway (Gemini 2.5 Pro). No API key required.
             </div>
           </Card>
 
