@@ -4,11 +4,11 @@ import { ArrowLeft } from "lucide-react";
 export const Route = createFileRoute("/portfolio-legacy")({
   head: () => ({
     meta: [
-      { title: "Portfolio OS — SpECS Fund Manager" },
+      { title: "Pipeline Tracker — SpECS Fund Manager" },
       {
         name: "description",
         content:
-          "Active companies, live data, term sheets and pre-DD notes for the SpECS Fund.",
+          "Deal pipeline, lead tracking, and origination workspace for the SpECS Fund.",
       },
     ],
   }),
