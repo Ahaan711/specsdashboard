@@ -30,46 +30,65 @@ export type CovenantItem = {
   threshold?: string;
 };
 
-export type SecurityData = {
+// One security package (a company may have several — e.g. first charge on
+// receivables, second charge on fixed assets — each tracked independently).
+export type SecurityStatus = "Pending" | "In Process" | "Perfected";
+export type SecurityItem = {
+  id: string;
   collateral?: string;
   charge?: string;
   coverage?: string;
   guarantors?: string;
   valuation?: string;
-  perfectionStatus?: string;
+  status: SecurityStatus;
+  notes?: string;
 };
 
-export type EscrowWaterfallStep = {
-  step: number;
-  label: string;
-  description?: string;
-};
-
-export type EscrowData = {
-  bank?: string;
-  account?: string;
-  triggerEvents?: string;
-  waterfall?: EscrowWaterfallStep[];
-};
-
-export type ComplianceFinding = {
-  key: string; // covenant id, or "security.<field>", or "escrow.step.<n>"
-  label: string;
-  status: "pass" | "breach" | "unknown";
-  note?: string;
-  actualValue?: string;
-};
-
-export type MISEntry = {
+// Conditions Precedent / Conditions Subsequent tracker. "Overdue" is not
+// stored — it's derived from dueDate vs. today wherever this is displayed,
+// so status never goes stale just from time passing.
+export type CPCSStatus = "Pending" | "Completed";
+export type CPCSItem = {
   id: string;
-  fileName: string;
-  uploadedAt: string;
-  period?: string;
-  aiSummary?: string;
-  breachDetected: boolean;
-  findings: ComplianceFinding[];
-  watchlistDismissed?: boolean;
-  suggestedWatchReason?: string;
+  kind: "CP" | "CS";
+  description: string;
+  dueDate?: string; // ISO
+  status: CPCSStatus;
+  completedAt?: string; // ISO, set when marked Completed
+  notes?: string;
+};
+
+// A dated compliance check against one of the covenants defined in
+// TermSheetData.covenants. Manually logged each review period, replacing the
+// old AI/MIS-upload breach detection.
+export type CovenantComplianceStatus = "Compliant" | "Breach" | "Not Tested";
+export type CovenantComplianceEntry = {
+  id: string;
+  covenantId: string; // references CovenantItem.id
+  period: string; // e.g. "Q3 FY26"
+  status: CovenantComplianceStatus;
+  note?: string;
+  recordedAt: string; // ISO
+};
+
+export type MeetingNote = {
+  id: string;
+  date: string; // ISO
+  notes: string;
+  kpis: { label: string; value: string }[]; // flexible, differs per meeting
+};
+
+export type LienStatus = "Lien Marked" | "Lien Pending" | "No Lien";
+export type DSRAInstrument = {
+  id: string;
+  bankName: string;
+  fdNumber: string;
+  creationDate: string; // ISO
+  maturityDate: string; // ISO
+  amount: number; // ₹
+  roi: number; // % p.a.
+  lienStatus: LienStatus;
+  notes?: string;
 };
 
 export type TermSheetData = {
@@ -78,16 +97,10 @@ export type TermSheetData = {
   issueSize?: string;
   coupon?: string;
   tenor?: string;
-  security?: string; // legacy free text
-  securityDetail?: SecurityData;
   repayment?: string;
   covenants?: CovenantItem[] | string[]; // back-compat
   putCall?: string;
-  conditionsPrecedent?: string;
   closingDate?: string;
-  risks?: string[];
-  escrow?: EscrowData;
-  misHistory?: MISEntry[];
 };
 
 // Normalize covenants from either legacy string[] or new CovenantItem[]
@@ -101,31 +114,6 @@ export function normalizeCovenants(
       : c,
   );
 }
-
-export type PreDDData = {
-  snapshot?: string;
-  thesis?: string;
-  structure?: string;
-  risks?: string[];
-  redFlags?: string[];
-  nextSteps?: string[];
-  analyst?: string;
-  date?: string;
-  checklist?: { item: string; done: boolean }[];
-};
-
-export type LiveFinancials = {
-  revenue?: string;
-  ebitda?: string;
-  pat?: string;
-  debt?: string;
-  netWorth?: string;
-  ratios?: { label: string; value: string }[];
-  rating?: { agency: string; rating: string; outlook?: string };
-  stockPrice?: string;
-  news?: { title: string; source: string; date: string }[];
-  updatedAt?: string;
-};
 
 export type Company = {
   id: string;
@@ -146,8 +134,11 @@ export type Company = {
   status: CompanyStatus;
   watchReason?: string;
   termSheet?: TermSheetData;
-  preDD?: PreDDData;
-  liveData?: LiveFinancials;
+  security?: SecurityItem[];
+  cpCsItems?: CPCSItem[];
+  covenantCompliance?: CovenantComplianceEntry[];
+  meetingNotes?: MeetingNote[];
+  dsra?: DSRAInstrument[];
 };
 
 const STORAGE_KEY = "portfolio_companies_v1";
@@ -173,21 +164,6 @@ const SEED: Company[] = [
     tenor: "36 months",
     maturityDate: "2027-03-15",
     status: "Active",
-    liveData: {
-      revenue: "₹ 612 Cr",
-      ebitda: "₹ 178 Cr",
-      pat: "₹ 92 Cr",
-      debt: "₹ 1,840 Cr",
-      netWorth: "₹ 920 Cr",
-      ratios: [
-        { label: "D/E", value: "2.0x" },
-        { label: "NIM", value: "11.8%" },
-        { label: "GNPA", value: "2.1%" },
-        { label: "ROA", value: "4.6%" },
-      ],
-      rating: { agency: "CRISIL", rating: "A-", outlook: "Stable" },
-      updatedAt: new Date().toISOString(),
-    },
   },
   {
     id: "gps-renewables",
@@ -211,20 +187,6 @@ const SEED: Company[] = [
     status: "Watch",
     watchReason:
       "Q3 plant utilisation dropped to 68% (vs 82% covenant floor). Awaiting operations note from CFO.",
-    liveData: {
-      revenue: "₹ 184 Cr",
-      ebitda: "₹ 41 Cr",
-      pat: "₹ 12 Cr",
-      debt: "₹ 320 Cr",
-      netWorth: "₹ 210 Cr",
-      ratios: [
-        { label: "DSCR", value: "1.18x" },
-        { label: "D/E", value: "1.5x" },
-        { label: "Plant CUF", value: "68%" },
-      ],
-      rating: { agency: "ICRA", rating: "BBB+", outlook: "Negative" },
-      updatedAt: new Date().toISOString(),
-    },
   },
   {
     id: "kreditbee",
@@ -246,21 +208,6 @@ const SEED: Company[] = [
     tenor: "30 months",
     maturityDate: "2026-05-10",
     status: "Active",
-    liveData: {
-      revenue: "₹ 1,348 Cr",
-      ebitda: "₹ 412 Cr",
-      pat: "₹ 218 Cr",
-      debt: "₹ 4,200 Cr",
-      netWorth: "₹ 1,650 Cr",
-      ratios: [
-        { label: "D/E", value: "2.5x" },
-        { label: "NIM", value: "13.4%" },
-        { label: "GNPA", value: "1.7%" },
-        { label: "ROA", value: "5.2%" },
-      ],
-      rating: { agency: "CARE", rating: "A", outlook: "Stable" },
-      updatedAt: new Date().toISOString(),
-    },
   },
   {
     id: "solex-energy",
@@ -282,21 +229,6 @@ const SEED: Company[] = [
     tenor: "60 months",
     maturityDate: "2030-01-25",
     status: "Active",
-    liveData: {
-      revenue: "₹ 532 Cr",
-      ebitda: "₹ 84 Cr",
-      pat: "₹ 41 Cr",
-      debt: "₹ 180 Cr",
-      netWorth: "₹ 295 Cr",
-      ratios: [
-        { label: "Capacity Util.", value: "78%" },
-        { label: "D/E", value: "0.6x" },
-        { label: "EBITDA Margin", value: "15.8%" },
-      ],
-      rating: { agency: "CRISIL", rating: "A-", outlook: "Positive" },
-      stockPrice: "₹ 1,842",
-      updatedAt: new Date().toISOString(),
-    },
   },
   {
     id: "srichakra-polyplast",
@@ -318,19 +250,6 @@ const SEED: Company[] = [
     tenor: "60 months",
     maturityDate: "2031-04-10",
     status: "Pipeline",
-    liveData: {
-      revenue: "₹ 142 Cr",
-      ebitda: "₹ 28 Cr",
-      pat: "₹ 9 Cr",
-      debt: "₹ 60 Cr",
-      netWorth: "₹ 78 Cr",
-      ratios: [
-        { label: "Capacity Util.", value: "62%" },
-        { label: "D/E", value: "0.8x" },
-        { label: "EBITDA Margin", value: "19.7%" },
-      ],
-      updatedAt: new Date().toISOString(),
-    },
   },
   {
     id: "alpha-alternatives",
@@ -352,20 +271,6 @@ const SEED: Company[] = [
     tenor: "42 months",
     maturityDate: "2027-12-05",
     status: "Active",
-    liveData: {
-      revenue: "₹ 488 Cr",
-      ebitda: "₹ 196 Cr",
-      pat: "₹ 122 Cr",
-      debt: "₹ 1,100 Cr",
-      netWorth: "₹ 1,420 Cr",
-      ratios: [
-        { label: "AUM", value: "₹ 24,000 Cr" },
-        { label: "D/E", value: "0.77x" },
-        { label: "ROE", value: "8.6%" },
-      ],
-      rating: { agency: "ICRA", rating: "A+", outlook: "Stable" },
-      updatedAt: new Date().toISOString(),
-    },
   },
 ];
 
@@ -390,6 +295,13 @@ export function loadCompanies(): Company[] {
 export function saveCompanies(list: Company[]) {
   if (!isBrowser()) return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+}
+
+export function addCompany(company: Company) {
+  const list = loadCompanies();
+  const next = [...list, company];
+  saveCompanies(next);
+  return company;
 }
 
 export function getCompany(id: string): Company | undefined {
