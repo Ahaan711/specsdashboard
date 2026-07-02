@@ -153,11 +153,27 @@ function DocumentsTab() {
                     <span
                       className="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider"
                       style={{
-                        backgroundColor: d.kind === "mis" ? "rgba(255,117,83,0.15)" : "rgba(59,130,246,0.15)",
-                        color: d.kind === "mis" ? "#FF7553" : "#3B82F6",
+                        backgroundColor:
+                          d.kind === "mis"
+                            ? "rgba(255,117,83,0.15)"
+                            : d.kind === "quarterly_review"
+                            ? "rgba(34,197,94,0.15)"
+                            : "rgba(59,130,246,0.15)",
+                        color:
+                          d.kind === "mis"
+                            ? "#FF7553"
+                            : d.kind === "quarterly_review"
+                            ? "#22C55E"
+                            : "#3B82F6",
                       }}
                     >
-                      {d.kind === "mis" ? "MIS" : d.kind === "termsheet" ? "Term Sheet" : d.kind}
+                      {d.kind === "mis"
+                        ? "MIS"
+                        : d.kind === "termsheet"
+                        ? "Term Sheet"
+                        : d.kind === "quarterly_review"
+                        ? "Review Notes"
+                        : d.kind}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-white/70">{d.company_name || "—"}</td>
