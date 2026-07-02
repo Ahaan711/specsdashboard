@@ -4,11 +4,11 @@ import { Briefcase, GitMerge, ArrowUpRight } from "lucide-react";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Command Center — PortfolioOS" },
+      { title: "Command Center — SpECS Fund" },
       {
         name: "description",
         content:
-          "Choose between Portfolio OS for active companies or Pipeline Tracker for deal origination.",
+          "Choose between Monitoring Dashboard for active companies or Pipeline Tracker for deal origination.",
       },
     ],
   }),
@@ -19,8 +19,8 @@ const cards = [
   {
     to: "/portfolio",
     icon: Briefcase,
-    title: "Portfolio OS",
-    subtitle: "Active companies, live data, term sheets & pre-DD notes",
+    title: "Monitoring Dashboard",
+    subtitle: "Active companies, term sheets, covenants & compliance tracking",
   },
   {
     to: "/portfolio-legacy",
@@ -50,7 +50,7 @@ function HomePage() {
             letterSpacing: "0.02em",
           }}
         >
-          PortfolioOS
+          Monitoring Dashboard
         </span>
       </header>
 
