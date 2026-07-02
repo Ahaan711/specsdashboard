@@ -93,6 +93,23 @@ export async function pushCompanies(): Promise<Result> {
   return { ok: true };
 }
 
+// Debounced push, for callers that save on every keystroke (e.g. inline
+// editable fields in the Monitoring Dashboard tabs). Without this, a push
+// after every keystroke would re-upsert the entire company list on every
+// change. Companies edited before this timer fires are still safe: they're
+// already saved to localStorage synchronously by updateCompany(), this only
+// delays the cloud copy by a moment.
+let _pushCompaniesTimer: ReturnType<typeof setTimeout> | null = null;
+export function pushCompaniesDebounced(delayMs = 1200) {
+  if (_pushCompaniesTimer) clearTimeout(_pushCompaniesTimer);
+  _pushCompaniesTimer = setTimeout(() => {
+    _pushCompaniesTimer = null;
+    pushCompanies().catch(() => {
+      // best-effort; next debounced call or manual Sync will retry
+    });
+  }, delayMs);
+}
+
 export async function pullCompanies(): Promise<Result> {
   const { data, error } = await supabase
     .from("portfolio_companies")
@@ -225,7 +242,7 @@ export async function syncPipelineOnly(): Promise<Result> {
 // ---------------- Documents ----------------
 export async function uploadDocument(
   file: File,
-  meta: { kind: "termsheet" | "mis" | "predd"; companyId?: string; companyName?: string },
+  meta: { kind: "quarterly_review" | "termsheet" | "mis" | "predd"; companyId?: string; companyName?: string },
 ): Promise<Result<DocumentRow>> {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const path = `${meta.companyId || "_unknown"}/${meta.kind}/${Date.now()}-${safeName}`;
@@ -282,4 +299,16 @@ export async function getDocumentSignedUrl(
     return null;
   }
   return data.signedUrl;
+}
+
+export async function deleteDocument(row: Pick<DocumentRow, "id" | "storage_path">): Promise<Result> {
+  const storageRes = await supabase.storage.from(BUCKET).remove([row.storage_path]);
+  if (storageRes.error) {
+    return { ok: false, ...errorFields(storageRes.error) };
+  }
+  const { error } = await supabase.from("portfolio_documents").delete().eq("id", row.id);
+  if (error) {
+    return { ok: false, ...errorFields(error) };
+  }
+  return { ok: true };
 }
