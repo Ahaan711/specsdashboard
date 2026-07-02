@@ -24,7 +24,7 @@ function SettingsPage() {
     <div className="p-6">
       <h1 className="text-2xl font-semibold text-white">Settings</h1>
       <p className="mt-1 text-sm text-white/50">
-        PortfolioOS — internal tool, single-user mode.
+        Monitoring Dashboard — internal tool, single-user mode.
       </p>
 
       <Tabs defaultValue="general" className="mt-6 max-w-4xl">
@@ -63,7 +63,7 @@ function SettingsPage() {
 
           <Card title="About">
             <div className="space-y-1 text-sm text-white/60">
-              <div>Build: PortfolioOS Phase 1</div>
+              <div>Build: Monitoring Dashboard Phase 1</div>
               <div>Mode: Internal · No authentication</div>
               <div>Currency: ₹ Crore · Dates: DD-MMM-YYYY</div>
             </div>
@@ -111,7 +111,7 @@ function DocumentsTab() {
             <span className="text-xs text-white/40">({docs.length})</span>
           </div>
           <div className="mt-0.5 text-xs text-white/50">
-            All term sheets and MIS files uploaded across PortfolioOS.
+            All term sheets and MIS files uploaded across Monitoring Dashboard.
           </div>
         </div>
         <button
