@@ -337,6 +337,7 @@ function TermSheetTab({ company, onUpdate }: { company: Company; onUpdate: (c: C
 
   return (
     <div className="space-y-4">
+      <TermSheetDocuments company={company} />
       <Card title="Executed Term Sheet">
         <div className="grid grid-cols-3 gap-4">
           <LabeledInput label="Issuer" value={form.issuer || ""} onChange={(v) => set("issuer", v)} />
@@ -353,6 +354,159 @@ function TermSheetTab({ company, onUpdate }: { company: Company; onUpdate: (c: C
       </Card>
       <SaveBar onSave={save} saving={saving} />
     </div>
+  );
+}
+
+// Plain file storage for the executed term sheet document itself — no
+// parsing or extraction, matching the "manual entry, no AI" direction for
+// the whole tab. The most recently uploaded file gets a prominent one-click
+// Open button; older uploads (e.g. amendments) stay listed below for the
+// audit trail, same pattern as Quarterly Review Notes.
+function TermSheetDocuments({ company }: { company: Company }) {
+  const [docs, setDocs] = useState<DocumentRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const refresh = async () => {
+    setLoading(true);
+    const res = await listDocuments();
+    if (res.ok) {
+      const filtered = (res.data || []).filter((d) => d.company_id === company.id && d.kind === "termsheet");
+      filtered.sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
+      setDocs(filtered);
+      setStatus(null);
+    } else if (res.notProvisioned) {
+      setStatus("Cloud sync not provisioned yet — try again after running the setup migration.");
+    } else {
+      setStatus(res.error || "Couldn't load documents.");
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company.id]);
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const res = await uploadDocument(file, { kind: "termsheet", companyId: company.id, companyName: company.name });
+      if (res.ok) {
+        toast.success("Term sheet uploaded.");
+        refresh();
+      } else {
+        toast.error(res.error || "Upload failed.");
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleOpen = async (d: DocumentRow) => {
+    setOpening(true);
+    try {
+      const url = await getDocumentSignedUrl(d.storage_path);
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+      else toast.error("Couldn't generate a link to open the document.");
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  const handleDelete = async (d: DocumentRow) => {
+    const res = await deleteDocument(d);
+    if (res.ok) {
+      toast.success("Deleted.");
+      refresh();
+    } else {
+      toast.error(res.error || "Couldn't delete.");
+    }
+  };
+
+  const latest = docs[0];
+  const older = docs.slice(1);
+
+  return (
+    <Card
+      title="Executed Term Sheet Document"
+      action={
+        <label>
+          <input
+            type="file"
+            className="hidden"
+            disabled={uploading}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleUpload(f);
+              e.target.value = "";
+            }}
+          />
+          <span
+            className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium text-white/70 hover:bg-[#1C3151]"
+            style={{ borderColor: "#1A2B47", opacity: uploading ? 0.6 : 1 }}
+          >
+            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            {latest ? "Upload New Version" : "Upload"}
+          </span>
+        </label>
+      }
+    >
+      {loading ? (
+        <div className="py-6 text-center text-xs text-white/40">Loading…</div>
+      ) : status ? (
+        <div className="rounded-md border border-dashed p-4 text-xs text-white/50" style={{ borderColor: "#1A2B47" }}>{status}</div>
+      ) : !latest ? (
+        <div className="flex flex-col items-center justify-center rounded-md border border-dashed py-10 text-xs text-white/40" style={{ borderColor: "#1A2B47" }}>
+          <FileText className="mb-2 h-6 w-6 text-white/20" />
+          No executed term sheet uploaded yet. Plain file storage only — nothing is parsed or extracted.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div
+            className="flex items-center justify-between rounded-md border p-3"
+            style={{ borderColor: "#1A2B47", backgroundColor: "#0F1B2E" }}
+          >
+            <div className="flex items-center gap-3">
+              <FileText className="h-5 w-5 text-[#FF7553]" />
+              <div>
+                <div className="text-sm text-white/90">{latest.filename}</div>
+                <div className="text-xs text-white/40">Uploaded {new Date(latest.uploaded_at).toLocaleString()}</div>
+              </div>
+            </div>
+            <Button
+              onClick={() => handleOpen(latest)}
+              disabled={opening}
+              className="h-8 gap-1.5 bg-[#FF7553] text-[#0F1B2E] hover:bg-[#FF8E72]"
+            >
+              {opening ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+              Open Term Sheet
+            </Button>
+          </div>
+
+          {older.length > 0 && (
+            <div>
+              <div className="mb-1.5 text-[11px] uppercase tracking-wider text-white/30">Earlier Versions</div>
+              <div className="space-y-1">
+                {older.map((d) => (
+                  <div key={d.id} className="flex items-center justify-between rounded-md border px-3 py-1.5" style={{ borderColor: "#1A2B47" }}>
+                    <span className="text-xs text-white/60">{d.filename} · {new Date(d.uploaded_at).toLocaleDateString()}</span>
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => handleOpen(d)} className="text-xs text-white/50 hover:text-[#FF7553]">Open</button>
+                      <button onClick={() => handleDelete(d)} className="text-white/30 hover:text-[#EF4444]">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -1111,3 +1265,4 @@ function DSRATab({ company, onUpdate }: { company: Company; onUpdate: (c: Compan
     </div>
   );
 }
+        
