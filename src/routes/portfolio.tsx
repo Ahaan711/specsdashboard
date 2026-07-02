@@ -15,7 +15,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/portfolio")({
   head: () => ({
     meta: [
-      { title: "PortfolioOS — SpECS Fund" },
+      { title: "Monitoring Dashboard — SpECS Fund" },
       {
         name: "description",
         content:
@@ -61,7 +61,7 @@ function PortfolioLayout() {
       >
         <Link to="/" className="flex h-14 items-center gap-2 border-b px-4" style={{ borderColor: "#1A2B47" }}>
           <Home className="h-4 w-4" style={{ color: "#FF7553" }} />
-          <span className="text-sm font-medium tracking-wide">PortfolioOS</span>
+          <span className="text-sm font-medium tracking-wide">Monitoring Dashboard</span>
         </Link>
         <nav className="flex flex-1 flex-col gap-0.5 p-2">
           {NAV.map((item) => {
