@@ -4,46 +4,71 @@ import {
   getCompany,
   updateCompany,
   normalizeCovenants,
-  type Company,
-  type MISEntry,
-  type ComplianceFinding,
-  type TermSheetData,
   formatCr,
   formatDate,
   SECTOR_COLORS,
   STATUS_COLORS,
+  type Company,
+  type TermSheetData,
+  type CovenantItem,
+  type SecurityItem,
+  type SecurityStatus,
+  type CPCSItem,
+  type CPCSStatus,
+  type CovenantComplianceEntry,
+  type CovenantComplianceStatus,
+  type MeetingNote,
+  type DSRAInstrument,
+  type LienStatus,
 } from "@/lib/portfolio-data";
-import { extractPdfText, extractDocText } from "@/lib/pdf-extract";
-import { parseDocument } from "@/lib/portfolio-ai.functions";
-import { uploadDocument } from "@/lib/cloud-sync";
-import { useServerFn } from "@tanstack/react-start";
+import {
+  uploadDocument,
+  listDocuments,
+  getDocumentSignedUrl,
+  deleteDocument,
+  pushCompaniesDebounced,
+  type DocumentRow,
+} from "@/lib/cloud-sync";
 import {
   ArrowLeft,
+  ExternalLink,
+  AlertCircle,
   Upload,
   Loader2,
-  ExternalLink,
-  TrendingUp,
   FileText,
-  CheckCircle2,
-  Circle,
-  AlertCircle,
-  CheckCircle,
-  XCircle,
-  MinusCircle,
-  ChevronDown,
-  ChevronRight,
-  ShieldCheck,
-  ArrowDown,
+  Plus,
+  Trash2,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { LabeledInput, LabeledTextarea, LabeledSelect, inputCls, inputStyle, labelCls } from "@/components/portfolio-form-fields";
 
 export const Route = createFileRoute("/portfolio/$companyId")({
   component: CompanyDetail,
 });
 
-type TabKey = "overview" | "live" | "termsheet" | "predd";
+// Persist a company patch to localStorage immediately, reflect it in local
+// component state, and push to the cloud (debounced). Every tab below saves
+// through this single path so nothing forgets the cloud push -- previously
+// updateCompany() only ever wrote to localStorage; pushCompanies() existed
+// but was never called from any screen, so company edits never left the
+// browser they were made on. Fixed here, once, for every tab.
+function persist(
+  companyId: string,
+  patch: Partial<Company>,
+  onUpdate: (c: Company) => void,
+) {
+  const updated = updateCompany(companyId, patch);
+  if (updated) onUpdate(updated);
+  pushCompaniesDebounced();
+  return updated;
+}
+
+function uid(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
 
 function CompanyDetail() {
   const { companyId } = Route.useParams();
@@ -139,38 +164,58 @@ function CompanyDetail() {
         </div>
       )}
 
-      <WatchlistSuggestionBanner company={company} onUpdate={setCompany} />
+      <DSRAMaturityBanner company={company} />
 
-
-      <Tabs defaultValue={"overview" as TabKey} className="w-full">
-        <TabsList className="border bg-[#15253F]" style={{ borderColor: "#1A2B47" }}>
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="flex-wrap border bg-[#15253F]" style={{ borderColor: "#1A2B47" }}>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="live">Live Data</TabsTrigger>
           <TabsTrigger value="termsheet">Term Sheet</TabsTrigger>
-          <TabsTrigger value="predd">Pre-DD</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="cpcs">CP &amp; CS</TabsTrigger>
+          <TabsTrigger value="covenants">Covenant Compliance</TabsTrigger>
+          <TabsTrigger value="review">Review Notes</TabsTrigger>
+          <TabsTrigger value="meetings">Meeting Notes</TabsTrigger>
+          <TabsTrigger value="dsra">DSRA</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
           <OverviewTab company={company} />
         </TabsContent>
-        <TabsContent value="live" className="mt-4">
-          <LiveTab company={company} />
-        </TabsContent>
         <TabsContent value="termsheet" className="mt-4">
           <TermSheetTab company={company} onUpdate={setCompany} />
         </TabsContent>
-        <TabsContent value="predd" className="mt-4">
-          <PreDDTab company={company} onUpdate={setCompany} />
+        <TabsContent value="security" className="mt-4">
+          <SecurityTab company={company} onUpdate={setCompany} />
+        </TabsContent>
+        <TabsContent value="cpcs" className="mt-4">
+          <CPCSTab company={company} onUpdate={setCompany} />
+        </TabsContent>
+        <TabsContent value="covenants" className="mt-4">
+          <CovenantComplianceTab company={company} onUpdate={setCompany} />
+        </TabsContent>
+        <TabsContent value="review" className="mt-4">
+          <ReviewNotesTab company={company} />
+        </TabsContent>
+        <TabsContent value="meetings" className="mt-4">
+          <MeetingNotesTab company={company} onUpdate={setCompany} />
+        </TabsContent>
+        <TabsContent value="dsra" className="mt-4">
+          <DSRATab company={company} onUpdate={setCompany} />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+// =================== Shared bits ===================
+
+function Card({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="rounded-lg border p-5" style={{ borderColor: "#1A2B47", backgroundColor: "#15253F" }}>
-      <div className="mb-3 text-[11px] uppercase tracking-wider text-white/40">{title}</div>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-[11px] uppercase tracking-wider text-white/40">{title}</div>
+        {action}
+      </div>
       {children}
     </div>
   );
@@ -184,6 +229,36 @@ function Field({ label, value }: { label: string; value?: string | number }) {
     </div>
   );
 }
+
+
+function SaveBar({ onSave, saving }: { onSave: () => void; saving: boolean }) {
+  return (
+    <div className="flex justify-end">
+      <Button
+        onClick={onSave}
+        disabled={saving}
+        className="h-9 gap-1.5 bg-[#FF7553] text-[#0F1B2E] hover:bg-[#FF8E72]"
+      >
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        Save
+      </Button>
+    </div>
+  );
+}
+
+function StatusPill({ status, colorMap }: { status: string; colorMap: Record<string, { bg: string; c: string }> }) {
+  const v = colorMap[status] || { bg: "#64748B20", c: "#94A3B8" };
+  return (
+    <span
+      className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+      style={{ backgroundColor: v.bg, color: v.c }}
+    >
+      {status}
+    </span>
+  );
+}
+
+// =================== Overview (unchanged) ===================
 
 function OverviewTab({ company }: { company: Company }) {
   return (
@@ -242,910 +317,797 @@ function OverviewTab({ company }: { company: Company }) {
   );
 }
 
-function LiveTab({ company }: { company: Company }) {
-  const live = company.liveData;
-  if (!live) {
-    return <div className="text-sm text-white/40">No live data yet.</div>;
-  }
+// =================== Term Sheet (Executed) — manual entry ===================
+
+function TermSheetTab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
+  const ts = company.termSheet || {};
+  const [form, setForm] = useState<TermSheetData>(ts);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => setForm(company.termSheet || {}), [company.id]);
+
+  const set = (k: keyof TermSheetData, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const save = () => {
+    setSaving(true);
+    persist(company.id, { termSheet: { ...company.termSheet, ...form } }, onUpdate);
+    setTimeout(() => setSaving(false), 300);
+    toast.success("Term sheet saved.");
+  };
+
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-5 gap-3">
-        {[
-          { l: "Revenue", v: live.revenue },
-          { l: "EBITDA", v: live.ebitda },
-          { l: "PAT", v: live.pat },
-          { l: "Debt", v: live.debt },
-          { l: "Net Worth", v: live.netWorth },
-        ].map((m) => (
-          <Card key={m.l} title={m.l}>
-            <div className="text-lg font-semibold text-white">{m.v || "—"}</div>
-          </Card>
-        ))}
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <Card title="Key Ratios">
-          <div className="grid grid-cols-2 gap-3">
-            {live.ratios?.map((r) => (
-              <div key={r.label} className="flex justify-between border-b pb-1.5 text-sm" style={{ borderColor: "#1A2B47" }}>
-                <span className="text-white/60">{r.label}</span>
-                <span className="font-mono text-white/90">{r.value}</span>
-              </div>
-            )) || <div className="text-sm text-white/40">No ratios.</div>}
+      <Card title="Executed Term Sheet">
+        <div className="grid grid-cols-3 gap-4">
+          <LabeledInput label="Issuer" value={form.issuer || ""} onChange={(v) => set("issuer", v)} />
+          <LabeledInput label="Instrument" value={form.instrument || ""} onChange={(v) => set("instrument", v)} />
+          <LabeledInput label="Issue Size" value={form.issueSize || ""} onChange={(v) => set("issueSize", v)} placeholder="₹ Cr" />
+          <LabeledInput label="Coupon" value={form.coupon || ""} onChange={(v) => set("coupon", v)} placeholder="e.g. 13.5% p.a." />
+          <LabeledInput label="Tenor" value={form.tenor || ""} onChange={(v) => set("tenor", v)} />
+          <LabeledInput label="Closing Date" value={form.closingDate || ""} onChange={(v) => set("closingDate", v)} type="date" />
+          <LabeledInput label="Put / Call" value={form.putCall || ""} onChange={(v) => set("putCall", v)} />
+        </div>
+        <div className="mt-4">
+          <LabeledTextarea label="Repayment" value={form.repayment || ""} onChange={(v) => set("repayment", v)} />
+        </div>
+      </Card>
+      <SaveBar onSave={save} saving={saving} />
+    </div>
+  );
+}
+
+// =================== Security ===================
+
+const SECURITY_STATUS_OPTIONS: SecurityStatus[] = ["Pending", "In Process", "Perfected"];
+const SECURITY_STATUS_COLORS: Record<string, { bg: string; c: string }> = {
+  Pending: { bg: "#64748B20", c: "#94A3B8" },
+  "In Process": { bg: "#F59E0B20", c: "#F59E0B" },
+  Perfected: { bg: "#22C55E20", c: "#22C55E" },
+};
+
+function SecurityTab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
+  const [items, setItems] = useState<SecurityItem[]>(company.security || []);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => setItems(company.security || []), [company.id]);
+
+  const addItem = () =>
+    setItems((prev) => [
+      ...prev,
+      { id: uid("sec"), collateral: "", charge: "", coverage: "", guarantors: "", valuation: "", status: "Pending" },
+    ]);
+  const removeItem = (id: string) => setItems((prev) => prev.filter((s) => s.id !== id));
+  const patch = (id: string, k: keyof SecurityItem, v: string) =>
+    setItems((prev) => prev.map((s) => (s.id === id ? { ...s, [k]: v } : s)));
+
+  const save = () => {
+    setSaving(true);
+    persist(company.id, { security: items }, onUpdate);
+    setTimeout(() => setSaving(false), 300);
+    toast.success("Security details saved.");
+  };
+
+  return (
+    <div className="space-y-4">
+      {items.length === 0 && (
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-sm text-white/40" style={{ borderColor: "#1A2B47" }}>
+          No security packages recorded yet.
+        </div>
+      )}
+      {items.map((s, idx) => (
+        <Card
+          key={s.id}
+          title={`Security Package ${idx + 1}`}
+          action={
+            <div className="flex items-center gap-2">
+              <StatusPill status={s.status} colorMap={SECURITY_STATUS_COLORS} />
+              <button onClick={() => removeItem(s.id)} className="text-white/30 hover:text-[#EF4444]">
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          }
+        >
+          <div className="grid grid-cols-3 gap-4">
+            <LabeledInput label="Collateral" value={s.collateral || ""} onChange={(v) => patch(s.id, "collateral", v)} />
+            <LabeledInput label="Charge" value={s.charge || ""} onChange={(v) => patch(s.id, "charge", v)} placeholder="First / Second / Pari-passu / Exclusive" />
+            <LabeledInput label="Coverage" value={s.coverage || ""} onChange={(v) => patch(s.id, "coverage", v)} placeholder="e.g. 2.0x asset cover" />
+            <LabeledInput label="Guarantors" value={s.guarantors || ""} onChange={(v) => patch(s.id, "guarantors", v)} />
+            <LabeledInput label="Valuation" value={s.valuation || ""} onChange={(v) => patch(s.id, "valuation", v)} />
+            <LabeledSelect label="Status" value={s.status} onChange={(v) => patch(s.id, "status", v)} options={SECURITY_STATUS_OPTIONS} />
+          </div>
+          <div className="mt-4">
+            <LabeledTextarea label="Notes" value={s.notes || ""} onChange={(v) => patch(s.id, "notes", v)} rows={2} />
           </div>
         </Card>
-        <Card title="Rating & Market">
+      ))}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={addItem}
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-xs text-white/70 hover:bg-[#1C3151]"
+          style={{ borderColor: "#1A2B47" }}
+        >
+          <Plus className="h-3.5 w-3.5" /> Add Security Package
+        </button>
+        <SaveBar onSave={save} saving={saving} />
+      </div>
+    </div>
+  );
+}
+
+// =================== CP & CS Compliance ===================
+
+const CPCS_STATUS_COLORS: Record<string, { bg: string; c: string }> = {
+  Pending: { bg: "#64748B20", c: "#94A3B8" },
+  Completed: { bg: "#22C55E20", c: "#22C55E" },
+  Overdue: { bg: "#EF444420", c: "#EF4444" },
+};
+
+// "Overdue" is derived, never stored -- see CPCSItem in portfolio-data.ts.
+function cpcsDisplayStatus(item: CPCSItem): string {
+  if (item.status === "Completed") return "Completed";
+  if (item.dueDate && new Date(item.dueDate).getTime() < Date.now()) return "Overdue";
+  return "Pending";
+}
+
+function CPCSTab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
+  const [items, setItems] = useState<CPCSItem[]>(company.cpCsItems || []);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => setItems(company.cpCsItems || []), [company.id]);
+
+  const addItem = (kind: "CP" | "CS") =>
+    setItems((prev) => [...prev, { id: uid("cpcs"), kind, description: "", dueDate: "", status: "Pending" }]);
+  const removeItem = (id: string) => setItems((prev) => prev.filter((i) => i.id !== id));
+  const patch = (id: string, k: keyof CPCSItem, v: string) =>
+    setItems((prev) =>
+      prev.map((i) => {
+        if (i.id !== id) return i;
+        const next = { ...i, [k]: v } as CPCSItem;
+        if (k === "status" && v === "Completed") next.completedAt = new Date().toISOString();
+        if (k === "status" && v === "Pending") next.completedAt = undefined;
+        return next;
+      }),
+    );
+
+  const save = () => {
+    setSaving(true);
+    persist(company.id, { cpCsItems: items }, onUpdate);
+    setTimeout(() => setSaving(false), 300);
+    toast.success("CP & CS items saved.");
+  };
+
+  const cps = items.filter((i) => i.kind === "CP");
+  const css = items.filter((i) => i.kind === "CS");
+
+  const renderGroup = (label: string, kind: "CP" | "CS", group: CPCSItem[]) => (
+    <Card
+      title={label}
+      action={
+        <button
+          onClick={() => addItem(kind)}
+          className="inline-flex items-center gap-1 text-xs text-white/60 hover:text-[#FF7553]"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add
+        </button>
+      }
+    >
+      {group.length === 0 ? (
+        <div className="py-6 text-center text-xs text-white/40">No {label.toLowerCase()} items yet.</div>
+      ) : (
+        <div className="space-y-3">
+          {group.map((item) => (
+            <div key={item.id} className="grid grid-cols-12 items-end gap-2 border-b pb-3" style={{ borderColor: "#1A2B47" }}>
+              <div className="col-span-6">
+                <label className={labelCls}>Description</label>
+                <input
+                  className={inputCls}
+                  style={inputStyle}
+                  value={item.description}
+                  onChange={(e) => patch(item.id, "description", e.target.value)}
+                />
+              </div>
+              <div className="col-span-2">
+                <label className={labelCls}>Due Date</label>
+                <input
+                  className={inputCls}
+                  style={inputStyle}
+                  type="date"
+                  value={item.dueDate || ""}
+                  onChange={(e) => patch(item.id, "dueDate", e.target.value)}
+                />
+              </div>
+              <div className="col-span-2">
+                <label className={labelCls}>Status</label>
+                <select
+                  className={inputCls}
+                  style={inputStyle}
+                  value={item.status}
+                  onChange={(e) => patch(item.id, "status", e.target.value)}
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+              <div className="col-span-1 flex justify-center">
+                <StatusPill status={cpcsDisplayStatus(item)} colorMap={CPCS_STATUS_COLORS} />
+              </div>
+              <div className="col-span-1 flex justify-end">
+                <button onClick={() => removeItem(item.id)} className="text-white/30 hover:text-[#EF4444]">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+
+  return (
+    <div className="space-y-4">
+      {renderGroup("Conditions Precedent", "CP", cps)}
+      {renderGroup("Conditions Subsequent", "CS", css)}
+      <SaveBar onSave={save} saving={saving} />
+    </div>
+  );
+}
+
+// =================== Covenant Compliance ===================
+
+const COVENANT_STATUS_COLORS: Record<string, { bg: string; c: string }> = {
+  Compliant: { bg: "#22C55E20", c: "#22C55E" },
+  Breach: { bg: "#EF444420", c: "#EF4444" },
+  "Not Tested": { bg: "#64748B20", c: "#94A3B8" },
+};
+
+function CovenantComplianceTab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
+  const covenants = normalizeCovenants(company.termSheet?.covenants);
+  const [defs, setDefs] = useState<CovenantItem[]>(covenants);
+  const [entries, setEntries] = useState<CovenantComplianceEntry[]>(company.covenantCompliance || []);
+  const [period, setPeriod] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDefs(normalizeCovenants(company.termSheet?.covenants));
+    setEntries(company.covenantCompliance || []);
+  }, [company.id]);
+
+  const addCovenant = () =>
+    setDefs((prev) => [...prev, { id: uid("cov"), text: "", type: "affirmative", threshold: "" }]);
+  const removeCovenant = (id: string) => {
+    setDefs((prev) => prev.filter((c) => c.id !== id));
+    setEntries((prev) => prev.filter((e) => e.covenantId !== id));
+  };
+  const patchCovenant = (id: string, k: keyof CovenantItem, v: string) =>
+    setDefs((prev) => prev.map((c) => (c.id === id ? { ...c, [k]: v } : c)));
+
+  const statusFor = (covenantId: string, p: string) =>
+    entries.find((e) => e.covenantId === covenantId && e.period === p);
+
+  const setStatus = (covenantId: string, p: string, status: CovenantComplianceStatus) => {
+    if (!p.trim()) {
+      toast.error("Enter a reporting period first (e.g. \"Q3 FY26\").");
+      return;
+    }
+    setEntries((prev) => {
+      const existing = prev.find((e) => e.covenantId === covenantId && e.period === p);
+      if (existing) {
+        return prev.map((e) => (e === existing ? { ...e, status, recordedAt: new Date().toISOString() } : e));
+      }
+      return [...prev, { id: uid("cce"), covenantId, period: p, status, recordedAt: new Date().toISOString() }];
+    });
+  };
+
+  const save = () => {
+    setSaving(true);
+    persist(
+      company.id,
+      {
+        termSheet: { ...company.termSheet, covenants: defs },
+        covenantCompliance: entries,
+      },
+      onUpdate,
+    );
+    setTimeout(() => setSaving(false), 300);
+    toast.success("Covenant compliance saved.");
+  };
+
+  const periodsLogged = Array.from(new Set(entries.map((e) => e.period))).sort().reverse();
+
+  return (
+    <div className="space-y-4">
+      <Card
+        title="Covenant Definitions"
+        action={
+          <button onClick={addCovenant} className="inline-flex items-center gap-1 text-xs text-white/60 hover:text-[#FF7553]">
+            <Plus className="h-3.5 w-3.5" /> Add Covenant
+          </button>
+        }
+      >
+        {defs.length === 0 ? (
+          <div className="py-6 text-center text-xs text-white/40">No covenants defined yet.</div>
+        ) : (
           <div className="space-y-3">
-            {live.rating && (
-              <div>
-                <div className="text-[11px] uppercase tracking-wider text-white/40">Credit Rating</div>
-                <div className="mt-1 flex items-baseline gap-2">
-                  <span className="text-2xl font-semibold text-[#FF7553]">{live.rating.rating}</span>
-                  <span className="text-xs text-white/50">{live.rating.agency} · {live.rating.outlook}</span>
+            {defs.map((c) => (
+              <div key={c.id} className="grid grid-cols-12 gap-2 border-b pb-3" style={{ borderColor: "#1A2B47" }}>
+                <div className="col-span-6">
+                  <label className={labelCls}>Covenant</label>
+                  <input className={inputCls} style={inputStyle} value={c.text} onChange={(e) => patchCovenant(c.id, "text", e.target.value)} />
+                </div>
+                <div className="col-span-3">
+                  <label className={labelCls}>Type</label>
+                  <select className={inputCls} style={inputStyle} value={c.type || "affirmative"} onChange={(e) => patchCovenant(c.id, "type", e.target.value)}>
+                    <option value="financial">Financial</option>
+                    <option value="affirmative">Affirmative</option>
+                    <option value="negative">Negative</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className={labelCls}>Threshold</label>
+                  <input className={inputCls} style={inputStyle} value={c.threshold || ""} onChange={(e) => patchCovenant(c.id, "threshold", e.target.value)} />
+                </div>
+                <div className="col-span-1 flex items-end justify-end">
+                  <button onClick={() => removeCovenant(c.id)} className="text-white/30 hover:text-[#EF4444]">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               </div>
-            )}
-            {live.stockPrice && (
-              <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-[#22C55E]" />
-                <span className="text-sm text-white/90">{live.stockPrice}</span>
-              </div>
-            )}
-            <div className="text-[10px] text-white/30">
-              Last updated {live.updatedAt ? formatDate(live.updatedAt) : "—"} · placeholder data
-            </div>
+            ))}
           </div>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-// =================== Watchlist suggestion banner ===================
-
-function WatchlistSuggestionBanner({
-  company,
-  onUpdate,
-}: {
-  company: Company;
-  onUpdate: (c: Company) => void;
-}) {
-  const history = company.termSheet?.misHistory || [];
-  const latest = history.length ? history[history.length - 1] : undefined;
-  if (!latest || !latest.breachDetected || latest.watchlistDismissed) return null;
-  if (company.status === "Watch") return null;
-
-  const accept = () => {
-    const reason =
-      latest.suggestedWatchReason ||
-      latest.aiSummary ||
-      "AI flagged potential covenant/security/escrow breach in latest MIS.";
-    const newHist = history.map((h) =>
-      h.id === latest.id ? { ...h, watchlistDismissed: true } : h,
-    );
-    const updated = updateCompany(company.id, {
-      status: "Watch",
-      watchReason: reason,
-      termSheet: { ...(company.termSheet || {}), misHistory: newHist },
-    });
-    if (updated) {
-      onUpdate(updated);
-      toast.success("Company added to watchlist.");
-    }
-  };
-
-  const dismiss = () => {
-    const newHist = history.map((h) =>
-      h.id === latest.id ? { ...h, watchlistDismissed: true } : h,
-    );
-    const updated = updateCompany(company.id, {
-      termSheet: { ...(company.termSheet || {}), misHistory: newHist },
-    });
-    if (updated) onUpdate(updated);
-  };
-
-  return (
-    <div
-      className="mb-6 flex items-start gap-3 rounded-md border p-3 text-sm"
-      style={{ borderColor: "#F59E0B60", backgroundColor: "#F59E0B14", color: "#FCD34D" }}
-    >
-      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-      <div className="flex-1">
-        <div className="font-medium">AI detected possible breach in latest MIS</div>
-        <div className="mt-0.5 text-xs opacity-90">
-          {latest.aiSummary || latest.suggestedWatchReason || "Review compliance findings below."}
-        </div>
-      </div>
-      <div className="flex shrink-0 gap-2">
-        <button
-          onClick={accept}
-          className="rounded-md bg-[#F59E0B] px-2.5 py-1 text-xs font-medium text-[#0F1B2E] hover:bg-[#FBBF24]"
-        >
-          Add to Watchlist
-        </button>
-        <button
-          onClick={dismiss}
-          className="rounded-md border px-2.5 py-1 text-xs text-white/70 hover:bg-white/5"
-          style={{ borderColor: "#F59E0B60" }}
-        >
-          Dismiss
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// =================== Term Sheet (split into Covenants / Security / Escrow + MIS) ===================
-
-function statusIcon(s: ComplianceFinding["status"]) {
-  if (s === "pass") return <CheckCircle className="h-3.5 w-3.5 text-[#22C55E]" />;
-  if (s === "breach") return <XCircle className="h-3.5 w-3.5 text-[#EF4444]" />;
-  return <MinusCircle className="h-3.5 w-3.5 text-white/30" />;
-}
-
-function statusPill(s: ComplianceFinding["status"]) {
-  const map = {
-    pass: { bg: "#22C55E20", c: "#22C55E", label: "Compliant" },
-    breach: { bg: "#EF444420", c: "#EF4444", label: "Breach" },
-    unknown: { bg: "#64748B20", c: "#94A3B8", label: "Unknown" },
-  } as const;
-  const v = map[s];
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide"
-      style={{ backgroundColor: v.bg, color: v.c }}
-    >
-      {v.label}
-    </span>
-  );
-}
-
-function findingByKey(latest: MISEntry | undefined, key: string) {
-  return latest?.findings?.find((f) => f.key === key);
-}
-
-function TermSheetTab({
-  company,
-  onUpdate,
-}: {
-  company: Company;
-  onUpdate: (c: Company) => void;
-}) {
-  const ts = company.termSheet;
-  const parseFn = useServerFn(parseDocument);
-  const [loadingTs, setLoadingTs] = useState(false);
-
-  const handleTermSheet = async (file: File) => {
-    setLoadingTs(true);
-    try {
-      toast.info(`Extracting text from ${file.name}…`);
-      const text = await extractDocText(file);
-      if (text.length < 30) {
-        toast.error("Could not extract text from file (might be scanned PDF or empty HTML).");
-        return;
-      }
-      toast.info("Parsing with AI…");
-      const res = await parseFn({ data: { text, mode: "termsheet" } });
-      if (!res.ok) {
-        toast.error(res.error);
-        return;
-      }
-      const parsed = res.data as TermSheetData;
-      // Preserve existing MIS history when re-uploading term sheet
-      const merged: TermSheetData = {
-        ...parsed,
-        misHistory: ts?.misHistory || [],
-      };
-      const updated = updateCompany(company.id, { termSheet: merged });
-      if (updated) {
-        onUpdate(updated);
-        toast.success("Term sheet parsed and saved.");
-      }
-      // Best-effort: archive original document to cloud (non-blocking).
-      uploadDocument(file, {
-        kind: "termsheet",
-        companyId: company.id,
-        companyName: company.name,
-      }).then((r) => {
-        if (!r.ok && !r.notProvisioned) {
-          console.warn("Document archive failed:", r.error);
-        }
-      });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoadingTs(false);
-    }
-  };
-
-  if (!ts) {
-    return (
-      <div>
-        <div className="mb-4 flex items-center justify-between">
-          <div className="text-xs text-white/50">
-            Upload Term Sheet (PDF or HTML) to auto-extract covenants, security & escrow waterfall.
-          </div>
-          <UploadButton
-            loading={loadingTs}
-            onPick={handleTermSheet}
-            label="Upload Term Sheet"
-            accept="application/pdf,text/html,.htm,.html"
-          />
-        </div>
-        <div
-          className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-sm text-white/40"
-          style={{ borderColor: "#1A2B47" }}
-        >
-          <FileText className="mb-3 h-8 w-8 text-white/20" />
-          No term sheet uploaded yet.
-        </div>
-      </div>
-    );
-  }
-
-  const covenants = normalizeCovenants(ts.covenants);
-  const security = ts.securityDetail || {};
-  const escrow = ts.escrow || {};
-  const history = ts.misHistory || [];
-  const latest = history.length ? history[history.length - 1] : undefined;
-
-  return (
-    <div className="space-y-6">
-      {/* Top bar: key terms summary + re-upload */}
-      <div
-        className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border p-4"
-        style={{ borderColor: "#1A2B47", backgroundColor: "#15253F" }}
-      >
-        <SummaryBit label="Issuer" value={ts.issuer} />
-        <SummaryBit label="Instrument" value={ts.instrument} />
-        <SummaryBit label="Issue Size" value={ts.issueSize} />
-        <SummaryBit label="Coupon" value={ts.coupon} />
-        <SummaryBit label="Tenor" value={ts.tenor} />
-        <SummaryBit label="Closing" value={ts.closingDate} />
-        <div className="ml-auto">
-          <UploadButton
-            loading={loadingTs}
-            onPick={handleTermSheet}
-            label="Re-upload Term Sheet"
-            small
-            accept="application/pdf,text/html,.htm,.html"
-          />
-        </div>
-      </div>
-
-      <Tabs defaultValue="covenants" className="w-full">
-        <TabsList className="border bg-[#15253F]" style={{ borderColor: "#1A2B47" }}>
-          <TabsTrigger value="covenants">Covenants</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="escrow">Escrow Flow</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="covenants" className="mt-4">
-          <CovenantsSection covenants={covenants} latest={latest} />
-        </TabsContent>
-        <TabsContent value="security" className="mt-4">
-          <SecuritySection security={security} latest={latest} />
-        </TabsContent>
-        <TabsContent value="escrow" className="mt-4">
-          <EscrowSection escrow={escrow} latest={latest} />
-        </TabsContent>
-      </Tabs>
-
-      <MISPanel company={company} onUpdate={onUpdate} />
-    </div>
-  );
-}
-
-function SummaryBit({ label, value }: { label: string; value?: string }) {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wider text-white/40">{label}</div>
-      <div className="text-sm text-white/90">{value || "—"}</div>
-    </div>
-  );
-}
-
-function UploadButton({
-  loading,
-  onPick,
-  label,
-  small,
-  accept = "application/pdf",
-}: {
-  loading: boolean;
-  onPick: (f: File) => void;
-  label: string;
-  small?: boolean;
-  accept?: string;
-}) {
-  return (
-    <label>
-      <input
-        type="file"
-        accept={accept}
-        className="hidden"
-        disabled={loading}
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onPick(f);
-          e.target.value = "";
-        }}
-      />
-      <span
-        className={`inline-flex cursor-pointer items-center gap-2 rounded-md bg-[#FF7553] font-medium text-[#0F1B2E] hover:bg-[#FF8E72] ${
-          small ? "h-8 px-2.5 text-xs" : "h-9 px-3 text-sm"
-        }`}
-        style={{ opacity: loading ? 0.6 : 1 }}
-      >
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-        {label}
-      </span>
-    </label>
-  );
-}
-
-function CovenantsSection({
-  covenants,
-  latest,
-}: {
-  covenants: ReturnType<typeof normalizeCovenants>;
-  latest?: MISEntry;
-}) {
-  if (covenants.length === 0) {
-    return (
-      <Card title="Covenants">
-        <div className="text-sm text-white/40">None extracted.</div>
+        )}
       </Card>
-    );
-  }
-  return (
-    <Card title="Covenants">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wider text-white/40">
-              <th className="py-2 pr-3">Type</th>
-              <th className="py-2 pr-3">Covenant</th>
-              <th className="py-2 pr-3">Threshold</th>
-              <th className="py-2 pr-3">Latest MIS</th>
-              <th className="py-2">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {covenants.map((c) => {
-              const f = findingByKey(latest, c.id);
+
+      <Card title="Log Compliance for a Period">
+        <div className="mb-4 max-w-xs">
+          <LabeledInput label="Reporting Period" value={period} onChange={setPeriod} placeholder='e.g. "Q3 FY26"' />
+        </div>
+        {defs.length === 0 ? (
+          <div className="py-4 text-center text-xs text-white/40">Add covenants above first.</div>
+        ) : (
+          <div className="space-y-2">
+            {defs.map((c) => {
+              const entry = period ? statusFor(c.id, period) : undefined;
               return (
-                <tr key={c.id} className="border-t" style={{ borderColor: "#1A2B47" }}>
-                  <td className="py-2 pr-3 text-xs uppercase text-white/50">{c.type || "—"}</td>
-                  <td className="py-2 pr-3 text-white/85">{c.text}</td>
-                  <td className="py-2 pr-3 font-mono text-xs text-white/70">{c.threshold || "—"}</td>
-                  <td className="py-2 pr-3 font-mono text-xs text-white/70">
-                    {f?.actualValue || (f?.note ?? "—")}
-                  </td>
-                  <td className="py-2">{f ? statusPill(f.status) : statusPill("unknown")}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
-}
-
-function SecuritySection({
-  security,
-  latest,
-}: {
-  security: NonNullable<TermSheetData["securityDetail"]>;
-  latest?: MISEntry;
-}) {
-  const fields: { key: keyof typeof security; label: string }[] = [
-    { key: "collateral", label: "Collateral" },
-    { key: "charge", label: "Charge" },
-    { key: "coverage", label: "Asset Cover" },
-    { key: "guarantors", label: "Guarantors" },
-    { key: "valuation", label: "Valuation" },
-    { key: "perfectionStatus", label: "Perfection Status" },
-  ];
-
-  return (
-    <Card title="Security Structure">
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-        {fields.map((f) => {
-          const finding = findingByKey(latest, `security.${f.key}`);
-          return (
-            <div key={f.key}>
-              <div className="flex items-center justify-between">
-                <div className="text-[11px] uppercase tracking-wider text-white/40">{f.label}</div>
-                {finding && statusPill(finding.status)}
-              </div>
-              <div className="mt-0.5 text-sm text-white/90">{security[f.key] || "—"}</div>
-              {finding?.note && (
-                <div className="mt-1 text-xs text-white/50">MIS: {finding.note}</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
-
-function EscrowSection({
-  escrow,
-  latest,
-}: {
-  escrow: NonNullable<TermSheetData["escrow"]>;
-  latest?: MISEntry;
-}) {
-  const waterfall = escrow.waterfall && escrow.waterfall.length > 0
-    ? [...escrow.waterfall].sort((a, b) => a.step - b.step)
-    : [];
-
-  return (
-    <div className="grid grid-cols-3 gap-4">
-      <div className="col-span-1 space-y-4">
-        <Card title="Escrow Account">
-          <Field label="Bank" value={escrow.bank} />
-          <div className="h-3" />
-          <Field label="Account" value={escrow.account} />
-          <div className="h-3" />
-          <Field label="Trigger Events" value={escrow.triggerEvents} />
-        </Card>
-      </div>
-      <div className="col-span-2">
-        <Card title="Cash-Flow Waterfall">
-          {waterfall.length === 0 ? (
-            <div className="text-sm text-white/40">No waterfall extracted.</div>
-          ) : (
-            <div className="flex flex-col items-stretch gap-2">
-              {waterfall.map((s, i) => {
-                const finding = findingByKey(latest, `escrow.step.${s.step}`);
-                const breach = finding?.status === "breach";
-                return (
-                  <div key={s.step}>
-                    <div
-                      className="flex items-start gap-3 rounded-md border p-3"
-                      style={{
-                        borderColor: breach ? "#EF444460" : "#1A2B47",
-                        backgroundColor: breach ? "#EF444410" : "#1C3151",
-                      }}
-                    >
-                      <div
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+                <div key={c.id} className="flex items-center justify-between gap-3 border-b py-2" style={{ borderColor: "#1A2B47" }}>
+                  <span className="text-sm text-white/80">{c.text || "(untitled covenant)"}</span>
+                  <div className="flex gap-1.5">
+                    {(["Compliant", "Breach", "Not Tested"] as CovenantComplianceStatus[]).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setStatus(c.id, period, s)}
+                        className="rounded px-2 py-1 text-[10px] font-medium uppercase tracking-wide transition-opacity"
                         style={{
-                          backgroundColor: breach ? "#EF444430" : "#FF755330",
-                          color: breach ? "#EF4444" : "#FF7553",
+                          backgroundColor: COVENANT_STATUS_COLORS[s].bg,
+                          color: COVENANT_STATUS_COLORS[s].c,
+                          opacity: entry?.status === s ? 1 : 0.35,
                         }}
                       >
-                        {s.step}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="text-sm font-medium text-white/90">{s.label}</div>
-                          {finding && statusPill(finding.status)}
-                        </div>
-                        {s.description && (
-                          <div className="mt-0.5 text-xs text-white/60">{s.description}</div>
-                        )}
-                        {finding?.actualValue && (
-                          <div className="mt-1 font-mono text-xs text-white/70">
-                            Actual: {finding.actualValue}
-                          </div>
-                        )}
-                        {finding?.note && (
-                          <div className="mt-1 text-xs text-white/50">{finding.note}</div>
-                        )}
-                      </div>
-                    </div>
-                    {i < waterfall.length - 1 && (
-                      <div className="flex justify-center py-1">
-                        <ArrowDown className="h-4 w-4 text-white/30" />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-// =================== MIS Panel ===================
-
-function MISPanel({
-  company,
-  onUpdate,
-}: {
-  company: Company;
-  onUpdate: (c: Company) => void;
-}) {
-  const ts = company.termSheet!;
-  const history = ts.misHistory || [];
-  const sorted = [...history].sort(
-    (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime(),
-  );
-  const parseFn = useServerFn(parseDocument);
-  const [loading, setLoading] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(sorted[0]?.id ?? null);
-
-  const handleFile = async (file: File) => {
-    setLoading(true);
-    try {
-      toast.info(`Extracting text from ${file.name}…`);
-      const text = await extractPdfText(file);
-      if (text.length < 30) {
-        toast.error("Could not extract text from MIS PDF.");
-        return;
-      }
-      // Build compact context from current termSheet obligations
-      const context = JSON.stringify({
-        covenants: normalizeCovenants(ts.covenants),
-        security: ts.securityDetail || {},
-        escrow: ts.escrow || {},
-      });
-      toast.info("Running AI compliance check…");
-      const res = await parseFn({ data: { text, mode: "mis", context } });
-      if (!res.ok) {
-        toast.error(res.error);
-        return;
-      }
-      const r = res.data as {
-        period?: string;
-        breachDetected?: boolean;
-        aiSummary?: string;
-        suggestedWatchReason?: string;
-        findings?: ComplianceFinding[];
-        financials?: {
-          revenue?: string;
-          ebitda?: string;
-          pat?: string;
-          debt?: string;
-          netWorth?: string;
-          ratios?: { label: string; value: string }[];
-        };
-      };
-      const entry: MISEntry = {
-        id: `mis-${Date.now()}`,
-        fileName: file.name,
-        uploadedAt: new Date().toISOString(),
-        period: r.period,
-        aiSummary: r.aiSummary,
-        suggestedWatchReason: r.suggestedWatchReason,
-        breachDetected: !!r.breachDetected,
-        findings: Array.isArray(r.findings) ? r.findings : [],
-      };
-      const newHist = [...history, entry];
-
-      // Merge any non-empty financial fields into company.liveData
-      const prevLive = company.liveData || {};
-      const fin = r.financials || {};
-      const pickStr = (next?: string, prev?: string) =>
-        next && next.trim() ? next : prev;
-      const mergedLive = {
-        ...prevLive,
-        revenue: pickStr(fin.revenue, prevLive.revenue),
-        ebitda: pickStr(fin.ebitda, prevLive.ebitda),
-        pat: pickStr(fin.pat, prevLive.pat),
-        debt: pickStr(fin.debt, prevLive.debt),
-        netWorth: pickStr(fin.netWorth, prevLive.netWorth),
-        ratios:
-          Array.isArray(fin.ratios) && fin.ratios.length > 0
-            ? fin.ratios
-            : prevLive.ratios,
-        updatedAt: new Date().toISOString(),
-      };
-
-      const updated = updateCompany(company.id, {
-        termSheet: { ...ts, misHistory: newHist },
-        liveData: mergedLive,
-      });
-      if (updated) {
-        onUpdate(updated);
-        setExpanded(entry.id);
-        const breaches = entry.findings.filter((f) => f.status === "breach").length;
-        if (entry.breachDetected) {
-          toast.warning(
-            `MIS parsed — financials updated, ${entry.findings.length} findings (${breaches} breach${breaches === 1 ? "" : "es"}).`,
-          );
-        } else {
-          toast.success(
-            `MIS parsed — financials updated, ${entry.findings.length} findings, no breaches.`,
-          );
-        }
-      }
-      uploadDocument(file, {
-        kind: "mis",
-        companyId: company.id,
-        companyName: company.name,
-      }).then((r) => {
-        if (!r.ok && !r.notProvisioned) {
-          console.warn("Document archive failed:", r.error);
-        }
-      });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div
-      className="rounded-lg border p-5"
-      style={{ borderColor: "#1A2B47", backgroundColor: "#15253F" }}
-    >
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-[#FF7553]" />
-            <h3 className="text-sm font-semibold text-white">MIS Reports</h3>
-            <span className="text-xs text-white/40">({sorted.length})</span>
-          </div>
-          <div className="mt-0.5 text-xs text-white/50">
-            Upload periodic MIS to check covenant / security / escrow compliance.
-          </div>
-        </div>
-        <UploadButton loading={loading} onPick={handleFile} label="Upload MIS" />
-      </div>
-
-      {sorted.length === 0 ? (
-        <div
-          className="flex flex-col items-center justify-center rounded-md border border-dashed py-10 text-sm text-white/40"
-          style={{ borderColor: "#1A2B47" }}
-        >
-          <FileText className="mb-2 h-6 w-6 text-white/20" />
-          No MIS uploaded yet.
-        </div>
-      ) : (
-        <ul className="space-y-2">
-          {sorted.map((e) => {
-            const isOpen = expanded === e.id;
-            return (
-              <li
-                key={e.id}
-                className="rounded-md border"
-                style={{ borderColor: "#1A2B47", backgroundColor: "#1C3151" }}
-              >
-                <button
-                  onClick={() => setExpanded(isOpen ? null : e.id)}
-                  className="flex w-full items-center gap-3 px-3 py-2 text-left"
-                >
-                  {isOpen ? (
-                    <ChevronDown className="h-4 w-4 text-white/50" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 text-white/50" />
-                  )}
-                  <FileText className="h-4 w-4 text-white/40" />
-                  <div className="flex-1">
-                    <div className="text-sm text-white/90">{e.fileName}</div>
-                    <div className="text-[11px] text-white/40">
-                      {e.period || "Period —"} · uploaded {formatDate(e.uploadedAt)}
-                    </div>
-                  </div>
-                  {e.breachDetected ? (
-                    <span
-                      className="rounded px-2 py-0.5 text-[10px] font-semibold uppercase"
-                      style={{ backgroundColor: "#EF444420", color: "#EF4444" }}
-                    >
-                      Breach
-                    </span>
-                  ) : (
-                    <span
-                      className="rounded px-2 py-0.5 text-[10px] font-semibold uppercase"
-                      style={{ backgroundColor: "#22C55E20", color: "#22C55E" }}
-                    >
-                      Compliant
-                    </span>
-                  )}
-                </button>
-                {isOpen && (
-                  <div className="border-t px-3 py-3" style={{ borderColor: "#1A2B47" }}>
-                    {e.aiSummary && (
-                      <div className="mb-3 text-xs text-white/70">{e.aiSummary}</div>
-                    )}
-                    {e.findings.length === 0 ? (
-                      <div className="text-xs text-white/40">No findings parsed.</div>
-                    ) : (
-                      <ul className="space-y-1.5">
-                        {e.findings.map((f, i) => (
-                          <li key={i} className="flex items-start gap-2 text-xs">
-                            <span className="mt-0.5">{statusIcon(f.status)}</span>
-                            <div className="flex-1">
-                              <div className="text-white/85">{f.label}</div>
-                              {(f.note || f.actualValue) && (
-                                <div className="text-white/50">
-                                  {f.actualValue ? `${f.actualValue}` : ""}
-                                  {f.actualValue && f.note ? " — " : ""}
-                                  {f.note || ""}
-                                </div>
-                              )}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function PreDDTab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
-  const dd = company.preDD;
-
-  const toggleCheck = (idx: number) => {
-    if (!dd?.checklist) return;
-    const next = dd.checklist.map((c, i) => (i === idx ? { ...c, done: !c.done } : c));
-    const updated = updateCompany(company.id, { preDD: { ...dd, checklist: next } });
-    if (updated) onUpdate(updated);
-  };
-
-  return (
-    <DocumentTab
-      mode="predd"
-      company={company}
-      onUpdate={onUpdate}
-      emptyHint="Upload Pre-DD note PDF to extract thesis, risks, red flags & auto-generate DD checklist."
-      currentData={dd}
-      patchKey="preDD"
-      render={(data: typeof dd) =>
-        data && (
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2 space-y-4">
-              <Card title="Snapshot">
-                <p className="text-sm text-white/80">{data.snapshot || "—"}</p>
-              </Card>
-              <Card title="Investment Thesis">
-                <p className="whitespace-pre-line text-sm text-white/80">{data.thesis || "—"}</p>
-              </Card>
-              <Card title="Deal Structure">
-                <p className="whitespace-pre-line text-sm text-white/80">{data.structure || "—"}</p>
-              </Card>
-              <div className="grid grid-cols-2 gap-4">
-                <Card title="Risks">
-                  <ul className="space-y-1.5 text-sm text-white/80">
-                    {(data.risks || []).map((r, i) => <li key={i}>• {r}</li>)}
-                  </ul>
-                </Card>
-                <Card title="Red Flags">
-                  <ul className="space-y-1.5 text-sm">
-                    {(data.redFlags || []).map((r, i) => (
-                      <li key={i} className="flex gap-2"><AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#EF4444]" /><span className="text-white/80">{r}</span></li>
-                    ))}
-                  </ul>
-                </Card>
-              </div>
-            </div>
-            <div className="space-y-4">
-              <Card title="DD Checklist">
-                <ul className="space-y-2">
-                  {(data.checklist || []).map((c, i) => (
-                    <li key={i}>
-                      <button onClick={() => toggleCheck(i)} className="flex w-full items-start gap-2 text-left text-sm">
-                        {c.done ? (
-                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#22C55E]" />
-                        ) : (
-                          <Circle className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
-                        )}
-                        <span className={c.done ? "text-white/40 line-through" : "text-white/85"}>{c.item}</span>
+                        {s}
                       </button>
-                    </li>
-                  ))}
-                  {(data.checklist || []).length === 0 && <div className="text-sm text-white/40">No checklist.</div>}
-                </ul>
-              </Card>
-              <Card title="Next Steps">
-                <ul className="space-y-1.5 text-sm text-white/80">
-                  {(data.nextSteps || []).map((s, i) => <li key={i}>→ {s}</li>)}
-                </ul>
-              </Card>
-              <Card title="Meta">
-                <Field label="Analyst" value={data.analyst} />
-                <div className="h-2" />
-                <Field label="Date" value={data.date} />
-              </Card>
-            </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        )
-      }
-    />
+        )}
+      </Card>
+
+      {periodsLogged.length > 0 && (
+        <Card title="Compliance History">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wider text-white/40">
+                  <th className="py-2 pr-4 font-medium">Covenant</th>
+                  {periodsLogged.map((p) => (
+                    <th key={p} className="px-3 py-2 text-center font-medium">{p}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {defs.map((c) => (
+                  <tr key={c.id} className="border-t" style={{ borderColor: "#1A2B47" }}>
+                    <td className="py-2 pr-4 text-white/80">{c.text || "(untitled)"}</td>
+                    {periodsLogged.map((p) => {
+                      const e = statusFor(c.id, p);
+                      return (
+                        <td key={p} className="px-3 py-2 text-center">
+                          {e ? <StatusPill status={e.status} colorMap={COVENANT_STATUS_COLORS} /> : <span className="text-white/20">—</span>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      <SaveBar onSave={save} saving={saving} />
+    </div>
   );
 }
 
-function DocumentTab<T>({
-  mode,
-  company,
-  onUpdate,
-  render,
-  emptyHint,
-  currentData,
-  patchKey,
-}: {
-  mode: "termsheet" | "predd";
-  company: Company;
-  onUpdate: (c: Company) => void;
-  render: (data: T | undefined) => React.ReactNode;
-  emptyHint: string;
-  currentData: T | undefined;
-  patchKey: "termSheet" | "preDD";
-}) {
-  const parseFn = useServerFn(parseDocument);
-  const [loading, setLoading] = useState(false);
+// =================== Quarterly Review Notes ===================
 
-  const handleFile = async (file: File) => {
+function ReviewNotesTab({ company }: { company: Company }) {
+  const [docs, setDocs] = useState<DocumentRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const refresh = async () => {
     setLoading(true);
+    const res = await listDocuments();
+    if (res.ok) {
+      setDocs((res.data || []).filter((d) => d.company_id === company.id && d.kind === "quarterly_review"));
+      setStatus(null);
+    } else if (res.notProvisioned) {
+      setStatus("Cloud sync not provisioned yet — try again after running the setup migration.");
+    } else {
+      setStatus(res.error || "Couldn't load review notes.");
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company.id]);
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
     try {
-      toast.info(`Extracting text from ${file.name}…`);
-      const text = await extractPdfText(file);
-      if (text.length < 30) {
-        toast.error("Could not extract text from PDF (might be scanned).");
-        return;
+      const res = await uploadDocument(file, { kind: "quarterly_review", companyId: company.id, companyName: company.name });
+      if (res.ok) {
+        toast.success("Review note uploaded.");
+        refresh();
+      } else {
+        toast.error(res.error || "Upload failed.");
       }
-      toast.info("Parsing with AI…");
-      const res = await parseFn({ data: { text, mode } });
-      if (!res.ok) {
-        toast.error(res.error);
-        return;
-      }
-      const updated = updateCompany(company.id, { [patchKey]: res.data } as Partial<Company>);
-      if (updated) {
-        onUpdate(updated);
-        toast.success("Document parsed and saved.");
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (d: DocumentRow) => {
+    const res = await deleteDocument(d);
+    if (res.ok) {
+      toast.success("Deleted.");
+      refresh();
+    } else {
+      toast.error(res.error || "Couldn't delete.");
     }
   };
 
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <div className="text-xs text-white/50">
-          {currentData ? "Extracted data shown below. Re-upload to refresh." : emptyHint}
-        </div>
+    <Card
+      title="Quarterly Portfolio Review Notes"
+      action={
         <label>
           <input
             type="file"
-            accept="application/pdf"
             className="hidden"
-            disabled={loading}
+            disabled={uploading}
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) handleFile(f);
+              if (f) handleUpload(f);
               e.target.value = "";
             }}
           />
           <span
-            className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md bg-[#FF7553] px-3 text-sm font-medium text-[#0F1B2E] hover:bg-[#FF8E72]"
-            style={{ opacity: loading ? 0.6 : 1 }}
+            className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-[#FF7553] px-2.5 text-xs font-medium text-[#0F1B2E] hover:bg-[#FF8E72]"
+            style={{ opacity: uploading ? 0.6 : 1 }}
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Upload PDF
+            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            Upload
           </span>
         </label>
-      </div>
-      {currentData ? (
-        render(currentData)
+      }
+    >
+      {loading ? (
+        <div className="py-8 text-center text-xs text-white/40">Loading…</div>
+      ) : status ? (
+        <div className="rounded-md border border-dashed p-4 text-xs text-white/50" style={{ borderColor: "#1A2B47" }}>{status}</div>
+      ) : docs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-md border border-dashed py-12 text-xs text-white/40" style={{ borderColor: "#1A2B47" }}>
+          <FileText className="mb-2 h-6 w-6 text-white/20" />
+          No review notes uploaded yet. Plain file storage only — nothing is parsed or extracted.
+        </div>
       ) : (
-        <div
-          className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-sm text-white/40"
-          style={{ borderColor: "#1A2B47" }}
-        >
-          <FileText className="mb-3 h-8 w-8 text-white/20" />
-          {emptyHint}
+        <div className="space-y-1.5">
+          {docs.map((d) => (
+            <div key={d.id} className="flex items-center justify-between rounded-md border px-3 py-2" style={{ borderColor: "#1A2B47" }}>
+              <div>
+                <div className="text-sm text-white/90">{d.filename}</div>
+                <div className="text-xs text-white/40">{new Date(d.uploaded_at).toLocaleString()}</div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={async () => {
+                    const url = await getDocumentSignedUrl(d.storage_path);
+                    if (url) window.open(url, "_blank", "noopener,noreferrer");
+                    else toast.error("Couldn't generate a download link.");
+                  }}
+                  className="text-xs text-white/60 hover:text-[#FF7553]"
+                >
+                  Download
+                </button>
+                <button onClick={() => handleDelete(d)} className="text-white/30 hover:text-[#EF4444]">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+// =================== Meeting Notes ===================
+
+function MeetingNotesTab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
+  const [notes, setNotes] = useState<MeetingNote[]>(company.meetingNotes || []);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => setNotes(company.meetingNotes || []), [company.id]);
+
+  const addNote = () =>
+    setNotes((prev) => [
+      { id: uid("meet"), date: new Date().toISOString().slice(0, 10), notes: "", kpis: [] },
+      ...prev,
+    ]);
+  const removeNote = (id: string) => setNotes((prev) => prev.filter((n) => n.id !== id));
+  const patchNote = (id: string, k: "date" | "notes", v: string) =>
+    setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, [k]: v } : n)));
+
+  const addKpi = (noteId: string) =>
+    setNotes((prev) =>
+      prev.map((n) => (n.id === noteId ? { ...n, kpis: [...n.kpis, { label: "", value: "" }] } : n)),
+    );
+  const removeKpi = (noteId: string, idx: number) =>
+    setNotes((prev) =>
+      prev.map((n) => (n.id === noteId ? { ...n, kpis: n.kpis.filter((_, i) => i !== idx) } : n)),
+    );
+  const patchKpi = (noteId: string, idx: number, k: "label" | "value", v: string) =>
+    setNotes((prev) =>
+      prev.map((n) =>
+        n.id === noteId ? { ...n, kpis: n.kpis.map((kv, i) => (i === idx ? { ...kv, [k]: v } : kv)) } : n,
+      ),
+    );
+
+  const save = () => {
+    setSaving(true);
+    persist(company.id, { meetingNotes: notes }, onUpdate);
+    setTimeout(() => setSaving(false), 300);
+    toast.success("Meeting notes saved.");
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button
+          onClick={addNote}
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-xs text-white/70 hover:bg-[#1C3151]"
+          style={{ borderColor: "#1A2B47" }}
+        >
+          <Plus className="h-3.5 w-3.5" /> Log Meeting
+        </button>
+      </div>
+
+      {notes.length === 0 && (
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-sm text-white/40" style={{ borderColor: "#1A2B47" }}>
+          No meeting notes logged yet.
+        </div>
+      )}
+
+      {notes.map((n) => (
+        <Card
+          key={n.id}
+          title={formatDate(n.date)}
+          action={
+            <button onClick={() => removeNote(n.id)} className="text-white/30 hover:text-[#EF4444]">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          }
+        >
+          <div className="mb-4 grid grid-cols-3 gap-4">
+            <LabeledInput label="Meeting Date" value={n.date} onChange={(v) => patchNote(n.id, "date", v)} type="date" />
+          </div>
+          <LabeledTextarea label="Notes" value={n.notes} onChange={(v) => patchNote(n.id, "notes", v)} rows={3} />
+
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[11px] uppercase tracking-wider text-white/40">KPI Snapshot</span>
+              <button onClick={() => addKpi(n.id)} className="inline-flex items-center gap-1 text-xs text-white/60 hover:text-[#FF7553]">
+                <Plus className="h-3.5 w-3.5" /> Add KPI
+              </button>
+            </div>
+            {n.kpis.length === 0 ? (
+              <div className="text-xs text-white/30">No KPIs recorded for this meeting.</div>
+            ) : (
+              <div className="space-y-2">
+                {n.kpis.map((kv, idx) => (
+                  <div key={idx} className="grid grid-cols-12 items-end gap-2">
+                    <div className="col-span-5">
+                      <input
+                        className={inputCls}
+                        style={inputStyle}
+                        placeholder="Label, e.g. Revenue"
+                        value={kv.label}
+                        onChange={(e) => patchKpi(n.id, idx, "label", e.target.value)}
+                      />
+                    </div>
+                    <div className="col-span-6">
+                      <input
+                        className={inputCls}
+                        style={inputStyle}
+                        placeholder="Value"
+                        value={kv.value}
+                        onChange={(e) => patchKpi(n.id, idx, "value", e.target.value)}
+                      />
+                    </div>
+                    <div className="col-span-1 flex justify-end">
+                      <button onClick={() => removeKpi(n.id, idx)} className="text-white/30 hover:text-[#EF4444]">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Card>
+      ))}
+
+      <SaveBar onSave={save} saving={saving} />
+    </div>
+  );
+}
+
+// =================== DSRA (FD / MF tracking) ===================
+
+const LIEN_STATUS_OPTIONS: LienStatus[] = ["Lien Marked", "Lien Pending", "No Lien"];
+const MATURITY_WARNING_DAYS = 7;
+
+function daysUntil(iso?: string): number | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return Math.ceil((d.getTime() - Date.now()) / 86400000);
+}
+
+// Shown at the top of every company page: flags any DSRA instrument on THIS
+// company maturing within MATURITY_WARNING_DAYS. Purely client-side, checked
+// on page load -- no scheduled job or email involved (per the "in-app only"
+// decision), so it only surfaces when someone actually opens the page.
+function DSRAMaturityBanner({ company }: { company: Company }) {
+  const upcoming = (company.dsra || []).filter((d) => {
+    const days = daysUntil(d.maturityDate);
+    return days !== null && days >= 0 && days <= MATURITY_WARNING_DAYS;
+  });
+  if (upcoming.length === 0) return null;
+  return (
+    <div
+      className="mb-6 flex items-start gap-2 rounded-md border p-3 text-sm"
+      style={{ borderColor: "#F59E0B40", backgroundColor: "#F59E0B10", color: "#FCD34D" }}
+    >
+      <Clock className="mt-0.5 h-4 w-4 shrink-0" />
+      <div>
+        <div className="font-medium">
+          {upcoming.length} FD{upcoming.length > 1 ? "s" : ""} maturing within {MATURITY_WARNING_DAYS} days
+        </div>
+        <div className="text-xs opacity-90">
+          {upcoming.map((d) => `${d.bankName} · ${d.fdNumber} (${formatDate(d.maturityDate)})`).join(" · ")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DSRATab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
+  const [items, setItems] = useState<DSRAInstrument[]>(company.dsra || []);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => setItems(company.dsra || []), [company.id]);
+
+  const addItem = () =>
+    setItems((prev) => [
+      ...prev,
+      {
+        id: uid("dsra"),
+        bankName: "",
+        fdNumber: "",
+        creationDate: "",
+        maturityDate: "",
+        amount: 0,
+        roi: 0,
+        lienStatus: "Lien Pending" as LienStatus,
+      },
+    ]);
+  const removeItem = (id: string) => setItems((prev) => prev.filter((d) => d.id !== id));
+  const patch = (id: string, k: keyof DSRAInstrument, v: string) =>
+    setItems((prev) =>
+      prev.map((d) =>
+        d.id === id
+          ? { ...d, [k]: k === "amount" || k === "roi" ? Number(v) || 0 : v }
+          : d,
+      ),
+    );
+
+  const save = () => {
+    setSaving(true);
+    persist(company.id, { dsra: items }, onUpdate);
+    setTimeout(() => setSaving(false), 300);
+    toast.success("DSRA instruments saved.");
+  };
+
+  const totalAmount = items.reduce((s, d) => s + (d.amount || 0), 0);
+
+  return (
+    <div className="space-y-4">
+      <Card title="DSRA Summary">
+        <div className="grid grid-cols-3 gap-4">
+          <Field label="Instruments" value={String(items.length)} />
+          <Field label="Total Amount" value={formatCr(totalAmount / 1e7 < 0.001 ? 0 : totalAmount / 1e7)} />
+        </div>
+      </Card>
+
+      {items.length === 0 && (
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-sm text-white/40" style={{ borderColor: "#1A2B47" }}>
+          No FD / MF instruments recorded yet.
+        </div>
+      )}
+
+      {items.map((d, idx) => {
+        const days = daysUntil(d.maturityDate);
+        const isUpcoming = days !== null && days >= 0 && days <= MATURITY_WARNING_DAYS;
+        return (
+          <Card
+            key={d.id}
+            title={`Instrument ${idx + 1}`}
+            action={
+              <div className="flex items-center gap-2">
+                {isUpcoming && (
+                  <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide" style={{ backgroundColor: "#F59E0B20", color: "#F59E0B" }}>
+                    <Clock className="h-3 w-3" /> Maturing in {days}d
+                  </span>
+                )}
+                <button onClick={() => removeItem(d.id)} className="text-white/30 hover:text-[#EF4444]">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            }
+          >
+            <div className="grid grid-cols-4 gap-4">
+              <LabeledInput label="Bank Name" value={d.bankName} onChange={(v) => patch(d.id, "bankName", v)} />
+              <LabeledInput label="FD Number" value={d.fdNumber} onChange={(v) => patch(d.id, "fdNumber", v)} />
+              <LabeledInput label="Creation Date" value={d.creationDate} onChange={(v) => patch(d.id, "creationDate", v)} type="date" />
+              <LabeledInput label="Maturity Date" value={d.maturityDate} onChange={(v) => patch(d.id, "maturityDate", v)} type="date" />
+              <LabeledInput label="Amount (₹)" value={d.amount || ""} onChange={(v) => patch(d.id, "amount", v)} type="number" />
+              <LabeledInput label="ROI (% p.a.)" value={d.roi || ""} onChange={(v) => patch(d.id, "roi", v)} type="number" />
+              <LabeledSelect label="Lien Status" value={d.lienStatus} onChange={(v) => patch(d.id, "lienStatus", v)} options={LIEN_STATUS_OPTIONS} />
+            </div>
+            <div className="mt-4">
+              <LabeledTextarea label="Notes" value={d.notes || ""} onChange={(v) => patch(d.id, "notes", v)} rows={2} />
+            </div>
+          </Card>
+        );
+      })}
+
+      <div className="flex items-center justify-between">
+        <button
+          onClick={addItem}
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-xs text-white/70 hover:bg-[#1C3151]"
+          style={{ borderColor: "#1A2B47" }}
+        >
+          <Plus className="h-3.5 w-3.5" /> Add Instrument
+        </button>
+        <SaveBar onSave={save} saving={saving} />
+      </div>
     </div>
   );
 }
