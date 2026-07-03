@@ -39,6 +39,7 @@ import {
   Plus,
   Trash2,
   Clock,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -231,9 +232,16 @@ function Field({ label, value }: { label: string; value?: string | number }) {
 }
 
 
-function SaveBar({ onSave, saving }: { onSave: () => void; saving: boolean }) {
+function SaveCancelBar({ onSave, onCancel, saving }: { onSave: () => void; onCancel: () => void; saving: boolean }) {
   return (
-    <div className="flex justify-end">
+    <div className="flex justify-end gap-2">
+      <button
+        onClick={onCancel}
+        className="inline-flex h-9 items-center rounded-md border px-4 text-sm text-white/70 hover:bg-[#1C3151]"
+        style={{ borderColor: "#1A2B47" }}
+      >
+        Cancel
+      </button>
       <Button
         onClick={onSave}
         disabled={saving}
@@ -242,6 +250,35 @@ function SaveBar({ onSave, saving }: { onSave: () => void; saving: boolean }) {
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         Save
       </Button>
+    </div>
+  );
+}
+
+function EditButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs text-white/70 hover:bg-[#1C3151]"
+      style={{ borderColor: "#1A2B47" }}
+    >
+      <Pencil className="h-3 w-3" /> Edit
+    </button>
+  );
+}
+
+function EmptyState({ label, onAdd }: { label: string; onAdd: () => void }) {
+  return (
+    <div
+      className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed py-10 text-sm text-white/40"
+      style={{ borderColor: "#1A2B47" }}
+    >
+      <span>{label}</span>
+      <button
+        onClick={onAdd}
+        className="inline-flex items-center gap-1.5 rounded-md bg-[#FF7553] px-3 py-1.5 text-xs font-medium text-[#0F1B2E] hover:bg-[#FF8E72]"
+      >
+        <Plus className="h-3.5 w-3.5" /> Add
+      </button>
     </div>
   );
 }
@@ -321,10 +358,15 @@ function OverviewTab({ company }: { company: Company }) {
 
 function TermSheetTab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
   const ts = company.termSheet || {};
+  const hasData = !!(ts.issuer || ts.instrument || ts.issueSize || ts.coupon || ts.tenor || ts.repayment || ts.putCall || ts.closingDate);
+  const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<TermSheetData>(ts);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => setForm(company.termSheet || {}), [company.id]);
+  useEffect(() => {
+    setForm(company.termSheet || {});
+    setEditing(false);
+  }, [company.id]);
 
   const set = (k: keyof TermSheetData, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -332,27 +374,57 @@ function TermSheetTab({ company, onUpdate }: { company: Company; onUpdate: (c: C
     setSaving(true);
     persist(company.id, { termSheet: { ...company.termSheet, ...form } }, onUpdate);
     setTimeout(() => setSaving(false), 300);
+    setEditing(false);
     toast.success("Term sheet saved.");
+  };
+
+  const cancel = () => {
+    setForm(company.termSheet || {});
+    setEditing(false);
   };
 
   return (
     <div className="space-y-4">
       <TermSheetDocuments company={company} />
-      <Card title="Executed Term Sheet">
-        <div className="grid grid-cols-3 gap-4">
-          <LabeledInput label="Issuer" value={form.issuer || ""} onChange={(v) => set("issuer", v)} />
-          <LabeledInput label="Instrument" value={form.instrument || ""} onChange={(v) => set("instrument", v)} />
-          <LabeledInput label="Issue Size" value={form.issueSize || ""} onChange={(v) => set("issueSize", v)} placeholder="₹ Cr" />
-          <LabeledInput label="Coupon" value={form.coupon || ""} onChange={(v) => set("coupon", v)} placeholder="e.g. 13.5% p.a." />
-          <LabeledInput label="Tenor" value={form.tenor || ""} onChange={(v) => set("tenor", v)} />
-          <LabeledInput label="Closing Date" value={form.closingDate || ""} onChange={(v) => set("closingDate", v)} type="date" />
-          <LabeledInput label="Put / Call" value={form.putCall || ""} onChange={(v) => set("putCall", v)} />
-        </div>
-        <div className="mt-4">
-          <LabeledTextarea label="Repayment" value={form.repayment || ""} onChange={(v) => set("repayment", v)} />
-        </div>
+      <Card
+        title="Executed Term Sheet"
+        action={!editing ? <EditButton onClick={() => setEditing(true)} /> : null}
+      >
+        {!editing && !hasData ? (
+          <EmptyState label="No term sheet details entered yet." onAdd={() => setEditing(true)} />
+        ) : !editing ? (
+          <>
+            <div className="grid grid-cols-3 gap-4">
+              <Field label="Issuer" value={form.issuer} />
+              <Field label="Instrument" value={form.instrument} />
+              <Field label="Issue Size" value={form.issueSize} />
+              <Field label="Coupon" value={form.coupon} />
+              <Field label="Tenor" value={form.tenor} />
+              <Field label="Closing Date" value={formatDate(form.closingDate)} />
+              <Field label="Put / Call" value={form.putCall} />
+            </div>
+            <div className="mt-4">
+              <Field label="Repayment" value={form.repayment} />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="grid grid-cols-3 gap-4">
+              <LabeledInput label="Issuer" value={form.issuer || ""} onChange={(v) => set("issuer", v)} />
+              <LabeledInput label="Instrument" value={form.instrument || ""} onChange={(v) => set("instrument", v)} />
+              <LabeledInput label="Issue Size" value={form.issueSize || ""} onChange={(v) => set("issueSize", v)} placeholder="₹ Cr" />
+              <LabeledInput label="Coupon" value={form.coupon || ""} onChange={(v) => set("coupon", v)} placeholder="e.g. 13.5% p.a." />
+              <LabeledInput label="Tenor" value={form.tenor || ""} onChange={(v) => set("tenor", v)} />
+              <LabeledInput label="Closing Date" value={form.closingDate || ""} onChange={(v) => set("closingDate", v)} type="date" />
+              <LabeledInput label="Put / Call" value={form.putCall || ""} onChange={(v) => set("putCall", v)} />
+            </div>
+            <div className="mt-4">
+              <LabeledTextarea label="Repayment" value={form.repayment || ""} onChange={(v) => set("repayment", v)} />
+            </div>
+          </>
+        )}
       </Card>
-      <SaveBar onSave={save} saving={saving} />
+      {editing && <SaveCancelBar onSave={save} onCancel={cancel} saving={saving} />}
     </div>
   );
 }
@@ -520,10 +592,15 @@ const SECURITY_STATUS_COLORS: Record<string, { bg: string; c: string }> = {
 };
 
 function SecurityTab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
-  const [items, setItems] = useState<SecurityItem[]>(company.security || []);
+  const saved = company.security || [];
+  const [editing, setEditing] = useState(false);
+  const [items, setItems] = useState<SecurityItem[]>(saved);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => setItems(company.security || []), [company.id]);
+  useEffect(() => {
+    setItems(company.security || []);
+    setEditing(false);
+  }, [company.id]);
 
   const addItem = () =>
     setItems((prev) => [
@@ -538,16 +615,62 @@ function SecurityTab({ company, onUpdate }: { company: Company; onUpdate: (c: Co
     setSaving(true);
     persist(company.id, { security: items }, onUpdate);
     setTimeout(() => setSaving(false), 300);
+    setEditing(false);
     toast.success("Security details saved.");
   };
 
+  const cancel = () => {
+    setItems(company.security || []);
+    setEditing(false);
+  };
+
+  const startEdit = () => {
+    setItems(company.security && company.security.length ? company.security : [
+      { id: uid("sec"), collateral: "", charge: "", coverage: "", guarantors: "", valuation: "", status: "Pending" },
+    ]);
+    setEditing(true);
+  };
+
+  if (!editing) {
+    return (
+      <div className="space-y-4">
+        {saved.length === 0 ? (
+          <EmptyState label="No security packages recorded yet." onAdd={startEdit} />
+        ) : (
+          <>
+            {saved.map((s, idx) => (
+              <Card
+                key={s.id}
+                title={`Security Package ${idx + 1}`}
+                action={
+                  <div className="flex items-center gap-2">
+                    <StatusPill status={s.status} colorMap={SECURITY_STATUS_COLORS} />
+                    {idx === 0 && <EditButton onClick={startEdit} />}
+                  </div>
+                }
+              >
+                <div className="grid grid-cols-3 gap-4">
+                  <Field label="Collateral" value={s.collateral} />
+                  <Field label="Charge" value={s.charge} />
+                  <Field label="Coverage" value={s.coverage} />
+                  <Field label="Guarantors" value={s.guarantors} />
+                  <Field label="Valuation" value={s.valuation} />
+                </div>
+                {s.notes && (
+                  <div className="mt-4">
+                    <Field label="Notes" value={s.notes} />
+                  </div>
+                )}
+              </Card>
+            ))}
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      {items.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-sm text-white/40" style={{ borderColor: "#1A2B47" }}>
-          No security packages recorded yet.
-        </div>
-      )}
       {items.map((s, idx) => (
         <Card
           key={s.id}
@@ -582,7 +705,7 @@ function SecurityTab({ company, onUpdate }: { company: Company; onUpdate: (c: Co
         >
           <Plus className="h-3.5 w-3.5" /> Add Security Package
         </button>
-        <SaveBar onSave={save} saving={saving} />
+        <SaveCancelBar onSave={save} onCancel={cancel} saving={saving} />
       </div>
     </div>
   );
@@ -604,10 +727,15 @@ function cpcsDisplayStatus(item: CPCSItem): string {
 }
 
 function CPCSTab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
-  const [items, setItems] = useState<CPCSItem[]>(company.cpCsItems || []);
+  const savedItems = company.cpCsItems || [];
+  const [editingKind, setEditingKind] = useState<"CP" | "CS" | null>(null);
+  const [items, setItems] = useState<CPCSItem[]>(savedItems);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => setItems(company.cpCsItems || []), [company.id]);
+  useEffect(() => {
+    setItems(company.cpCsItems || []);
+    setEditingKind(null);
+  }, [company.id]);
 
   const addItem = (kind: "CP" | "CS") =>
     setItems((prev) => [...prev, { id: uid("cpcs"), kind, description: "", dueDate: "", status: "Pending" }]);
@@ -627,13 +755,46 @@ function CPCSTab({ company, onUpdate }: { company: Company; onUpdate: (c: Compan
     setSaving(true);
     persist(company.id, { cpCsItems: items }, onUpdate);
     setTimeout(() => setSaving(false), 300);
+    setEditingKind(null);
     toast.success("CP & CS items saved.");
   };
 
-  const cps = items.filter((i) => i.kind === "CP");
-  const css = items.filter((i) => i.kind === "CS");
+  const cancel = () => {
+    setItems(company.cpCsItems || []);
+    setEditingKind(null);
+  };
 
-  const renderGroup = (label: string, kind: "CP" | "CS", group: CPCSItem[]) => (
+  const startEdit = (kind: "CP" | "CS") => {
+    setItems(company.cpCsItems || []);
+    setEditingKind(kind);
+  };
+
+  const savedCps = savedItems.filter((i) => i.kind === "CP");
+  const savedCss = savedItems.filter((i) => i.kind === "CS");
+  const editCps = items.filter((i) => i.kind === "CP");
+  const editCss = items.filter((i) => i.kind === "CS");
+
+  const renderReadOnly = (label: string, kind: "CP" | "CS", group: CPCSItem[]) => (
+    <Card title={label} action={<EditButton onClick={() => startEdit(kind)} />}>
+      {group.length === 0 ? (
+        <EmptyState label={`No ${label.toLowerCase()} items yet.`} onAdd={() => startEdit(kind)} />
+      ) : (
+        <div className="space-y-2">
+          {group.map((item) => (
+            <div key={item.id} className="flex items-center justify-between border-b py-2" style={{ borderColor: "#1A2B47" }}>
+              <div>
+                <div className="text-sm text-white/90">{item.description || "(untitled)"}</div>
+                <div className="text-xs text-white/40">Due {item.dueDate ? formatDate(item.dueDate) : "—"}</div>
+              </div>
+              <StatusPill status={cpcsDisplayStatus(item)} colorMap={CPCS_STATUS_COLORS} />
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+
+  const renderEdit = (label: string, kind: "CP" | "CS", group: CPCSItem[]) => (
     <Card
       title={label}
       action={
@@ -699,9 +860,9 @@ function CPCSTab({ company, onUpdate }: { company: Company; onUpdate: (c: Compan
 
   return (
     <div className="space-y-4">
-      {renderGroup("Conditions Precedent", "CP", cps)}
-      {renderGroup("Conditions Subsequent", "CS", css)}
-      <SaveBar onSave={save} saving={saving} />
+      {editingKind === "CP" ? renderEdit("Conditions Precedent", "CP", editCps) : renderReadOnly("Conditions Precedent", "CP", savedCps)}
+      {editingKind === "CS" ? renderEdit("Conditions Subsequent", "CS", editCss) : renderReadOnly("Conditions Subsequent", "CS", savedCss)}
+      {editingKind && <SaveCancelBar onSave={save} onCancel={cancel} saving={saving} />}
     </div>
   );
 }
@@ -715,15 +876,21 @@ const COVENANT_STATUS_COLORS: Record<string, { bg: string; c: string }> = {
 };
 
 function CovenantComplianceTab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
-  const covenants = normalizeCovenants(company.termSheet?.covenants);
-  const [defs, setDefs] = useState<CovenantItem[]>(covenants);
+  const savedDefs = normalizeCovenants(company.termSheet?.covenants);
+  const [editingDefs, setEditingDefs] = useState(false);
+  const [defs, setDefs] = useState<CovenantItem[]>(savedDefs);
+  const [defsSaving, setDefsSaving] = useState(false);
+
   const [entries, setEntries] = useState<CovenantComplianceEntry[]>(company.covenantCompliance || []);
   const [period, setPeriod] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [logSaving, setLogSaving] = useState(false);
+  const [logDirty, setLogDirty] = useState(false);
 
   useEffect(() => {
     setDefs(normalizeCovenants(company.termSheet?.covenants));
+    setEditingDefs(false);
     setEntries(company.covenantCompliance || []);
+    setLogDirty(false);
   }, [company.id]);
 
   const addCovenant = () =>
@@ -740,9 +907,10 @@ function CovenantComplianceTab({ company, onUpdate }: { company: Company; onUpda
 
   const setStatus = (covenantId: string, p: string, status: CovenantComplianceStatus) => {
     if (!p.trim()) {
-      toast.error("Enter a reporting period first (e.g. \"Q3 FY26\").");
+      toast.error('Enter a reporting period first (e.g. "Q3 FY26").');
       return;
     }
+    setLogDirty(true);
     setEntries((prev) => {
       const existing = prev.find((e) => e.covenantId === covenantId && e.period === p);
       if (existing) {
@@ -752,74 +920,105 @@ function CovenantComplianceTab({ company, onUpdate }: { company: Company; onUpda
     });
   };
 
-  const save = () => {
-    setSaving(true);
-    persist(
-      company.id,
-      {
-        termSheet: { ...company.termSheet, covenants: defs },
-        covenantCompliance: entries,
-      },
-      onUpdate,
-    );
-    setTimeout(() => setSaving(false), 300);
-    toast.success("Covenant compliance saved.");
+  const saveDefs = () => {
+    setDefsSaving(true);
+    persist(company.id, { termSheet: { ...company.termSheet, covenants: defs } }, onUpdate);
+    setTimeout(() => setDefsSaving(false), 300);
+    setEditingDefs(false);
+    toast.success("Covenant definitions saved.");
+  };
+
+  const cancelDefs = () => {
+    setDefs(savedDefs);
+    setEditingDefs(false);
+  };
+
+  const saveLog = () => {
+    setLogSaving(true);
+    persist(company.id, { covenantCompliance: entries }, onUpdate);
+    setTimeout(() => setLogSaving(false), 300);
+    setLogDirty(false);
+    toast.success("Compliance log saved.");
   };
 
   const periodsLogged = Array.from(new Set(entries.map((e) => e.period))).sort().reverse();
+  const activeDefs = editingDefs ? defs : savedDefs;
 
   return (
     <div className="space-y-4">
-      <Card
-        title="Covenant Definitions"
-        action={
-          <button onClick={addCovenant} className="inline-flex items-center gap-1 text-xs text-white/60 hover:text-[#FF7553]">
-            <Plus className="h-3.5 w-3.5" /> Add Covenant
-          </button>
-        }
-      >
-        {defs.length === 0 ? (
-          <div className="py-6 text-center text-xs text-white/40">No covenants defined yet.</div>
-        ) : (
-          <div className="space-y-3">
-            {defs.map((c) => (
-              <div key={c.id} className="grid grid-cols-12 gap-2 border-b pb-3" style={{ borderColor: "#1A2B47" }}>
-                <div className="col-span-6">
-                  <label className={labelCls}>Covenant</label>
-                  <input className={inputCls} style={inputStyle} value={c.text} onChange={(e) => patchCovenant(c.id, "text", e.target.value)} />
+      {!editingDefs ? (
+        <Card title="Covenant Definitions" action={<EditButton onClick={() => setEditingDefs(true)} />}>
+          {savedDefs.length === 0 ? (
+            <EmptyState label="No covenants defined yet." onAdd={() => setEditingDefs(true)} />
+          ) : (
+            <div className="space-y-2">
+              {savedDefs.map((c) => (
+                <div key={c.id} className="flex items-center justify-between border-b py-2" style={{ borderColor: "#1A2B47" }}>
+                  <span className="text-sm text-white/90">{c.text || "(untitled)"}</span>
+                  <div className="flex items-center gap-3 text-xs text-white/50">
+                    <span className="capitalize">{c.type}</span>
+                    <span>{c.threshold || "—"}</span>
+                  </div>
                 </div>
-                <div className="col-span-3">
-                  <label className={labelCls}>Type</label>
-                  <select className={inputCls} style={inputStyle} value={c.type || "affirmative"} onChange={(e) => patchCovenant(c.id, "type", e.target.value)}>
-                    <option value="financial">Financial</option>
-                    <option value="affirmative">Affirmative</option>
-                    <option value="negative">Negative</option>
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className={labelCls}>Threshold</label>
-                  <input className={inputCls} style={inputStyle} value={c.threshold || ""} onChange={(e) => patchCovenant(c.id, "threshold", e.target.value)} />
-                </div>
-                <div className="col-span-1 flex items-end justify-end">
-                  <button onClick={() => removeCovenant(c.id)} className="text-white/30 hover:text-[#EF4444]">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      ) : (
+        <>
+          <Card
+            title="Covenant Definitions"
+            action={
+              <button onClick={addCovenant} className="inline-flex items-center gap-1 text-xs text-white/60 hover:text-[#FF7553]">
+                <Plus className="h-3.5 w-3.5" /> Add Covenant
+              </button>
+            }
+          >
+            {defs.length === 0 ? (
+              <div className="py-6 text-center text-xs text-white/40">No covenants defined yet.</div>
+            ) : (
+              <div className="space-y-3">
+                {defs.map((c) => (
+                  <div key={c.id} className="grid grid-cols-12 gap-2 border-b pb-3" style={{ borderColor: "#1A2B47" }}>
+                    <div className="col-span-6">
+                      <label className={labelCls}>Covenant</label>
+                      <input className={inputCls} style={inputStyle} value={c.text} onChange={(e) => patchCovenant(c.id, "text", e.target.value)} />
+                    </div>
+                    <div className="col-span-3">
+                      <label className={labelCls}>Type</label>
+                      <select className={inputCls} style={inputStyle} value={c.type || "affirmative"} onChange={(e) => patchCovenant(c.id, "type", e.target.value)}>
+                        <option value="financial">Financial</option>
+                        <option value="affirmative">Affirmative</option>
+                        <option value="negative">Negative</option>
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className={labelCls}>Threshold</label>
+                      <input className={inputCls} style={inputStyle} value={c.threshold || ""} onChange={(e) => patchCovenant(c.id, "threshold", e.target.value)} />
+                    </div>
+                    <div className="col-span-1 flex items-end justify-end">
+                      <button onClick={() => removeCovenant(c.id)} className="text-white/30 hover:text-[#EF4444]">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
-      </Card>
+            )}
+          </Card>
+          <SaveCancelBar onSave={saveDefs} onCancel={cancelDefs} saving={defsSaving} />
+        </>
+      )}
 
       <Card title="Log Compliance for a Period">
         <div className="mb-4 max-w-xs">
           <LabeledInput label="Reporting Period" value={period} onChange={setPeriod} placeholder='e.g. "Q3 FY26"' />
         </div>
-        {defs.length === 0 ? (
+        {activeDefs.length === 0 ? (
           <div className="py-4 text-center text-xs text-white/40">Add covenants above first.</div>
         ) : (
           <div className="space-y-2">
-            {defs.map((c) => {
+            {activeDefs.map((c) => {
               const entry = period ? statusFor(c.id, period) : undefined;
               return (
                 <div key={c.id} className="flex items-center justify-between gap-3 border-b py-2" style={{ borderColor: "#1A2B47" }}>
@@ -845,6 +1044,14 @@ function CovenantComplianceTab({ company, onUpdate }: { company: Company; onUpda
             })}
           </div>
         )}
+        {logDirty && (
+          <div className="mt-4 flex justify-end">
+            <Button onClick={saveLog} disabled={logSaving} className="h-9 gap-1.5 bg-[#FF7553] text-[#0F1B2E] hover:bg-[#FF8E72]">
+              {logSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save Compliance Log
+            </Button>
+          </div>
+        )}
       </Card>
 
       {periodsLogged.length > 0 && (
@@ -860,7 +1067,7 @@ function CovenantComplianceTab({ company, onUpdate }: { company: Company; onUpda
                 </tr>
               </thead>
               <tbody>
-                {defs.map((c) => (
+                {activeDefs.map((c) => (
                   <tr key={c.id} className="border-t" style={{ borderColor: "#1A2B47" }}>
                     <td className="py-2 pr-4 text-white/80">{c.text || "(untitled)"}</td>
                     {periodsLogged.map((p) => {
@@ -878,8 +1085,6 @@ function CovenantComplianceTab({ company, onUpdate }: { company: Company; onUpda
           </div>
         </Card>
       )}
-
-      <SaveBar onSave={save} saving={saving} />
     </div>
   );
 }
@@ -1004,17 +1209,27 @@ function ReviewNotesTab({ company }: { company: Company }) {
 // =================== Meeting Notes ===================
 
 function MeetingNotesTab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
-  const [notes, setNotes] = useState<MeetingNote[]>(company.meetingNotes || []);
+  const savedNotes = company.meetingNotes || [];
+  const [notes, setNotes] = useState<MeetingNote[]>(savedNotes);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => setNotes(company.meetingNotes || []), [company.id]);
+  useEffect(() => {
+    setNotes(company.meetingNotes || []);
+    setEditingId(null);
+  }, [company.id]);
 
-  const addNote = () =>
-    setNotes((prev) => [
-      { id: uid("meet"), date: new Date().toISOString().slice(0, 10), notes: "", kpis: [] },
-      ...prev,
-    ]);
-  const removeNote = (id: string) => setNotes((prev) => prev.filter((n) => n.id !== id));
+  const addNote = () => {
+    const newNote: MeetingNote = { id: uid("meet"), date: new Date().toISOString().slice(0, 10), notes: "", kpis: [] };
+    setNotes((prev) => [newNote, ...prev]);
+    setEditingId(newNote.id);
+  };
+  const removeNote = (id: string) => {
+    setNotes((prev) => prev.filter((n) => n.id !== id));
+    persist(company.id, { meetingNotes: notes.filter((n) => n.id !== id) }, onUpdate);
+    if (editingId === id) setEditingId(null);
+    toast.success("Meeting note removed.");
+  };
   const patchNote = (id: string, k: "date" | "notes", v: string) =>
     setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, [k]: v } : n)));
 
@@ -1037,7 +1252,18 @@ function MeetingNotesTab({ company, onUpdate }: { company: Company; onUpdate: (c
     setSaving(true);
     persist(company.id, { meetingNotes: notes }, onUpdate);
     setTimeout(() => setSaving(false), 300);
-    toast.success("Meeting notes saved.");
+    setEditingId(null);
+    toast.success("Meeting note saved.");
+  };
+
+  const cancel = (id: string) => {
+    const isNew = !savedNotes.some((n) => n.id === id);
+    if (isNew) {
+      setNotes((prev) => prev.filter((n) => n.id !== id));
+    } else {
+      setNotes(savedNotes);
+    }
+    setEditingId(null);
   };
 
   return (
@@ -1058,66 +1284,92 @@ function MeetingNotesTab({ company, onUpdate }: { company: Company; onUpdate: (c
         </div>
       )}
 
-      {notes.map((n) => (
-        <Card
-          key={n.id}
-          title={formatDate(n.date)}
-          action={
-            <button onClick={() => removeNote(n.id)} className="text-white/30 hover:text-[#EF4444]">
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          }
-        >
-          <div className="mb-4 grid grid-cols-3 gap-4">
-            <LabeledInput label="Meeting Date" value={n.date} onChange={(v) => patchNote(n.id, "date", v)} type="date" />
-          </div>
-          <LabeledTextarea label="Notes" value={n.notes} onChange={(v) => patchNote(n.id, "notes", v)} rows={3} />
-
-          <div className="mt-4">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[11px] uppercase tracking-wider text-white/40">KPI Snapshot</span>
-              <button onClick={() => addKpi(n.id)} className="inline-flex items-center gap-1 text-xs text-white/60 hover:text-[#FF7553]">
-                <Plus className="h-3.5 w-3.5" /> Add KPI
-              </button>
-            </div>
-            {n.kpis.length === 0 ? (
-              <div className="text-xs text-white/30">No KPIs recorded for this meeting.</div>
-            ) : (
-              <div className="space-y-2">
-                {n.kpis.map((kv, idx) => (
-                  <div key={idx} className="grid grid-cols-12 items-end gap-2">
-                    <div className="col-span-5">
-                      <input
-                        className={inputCls}
-                        style={inputStyle}
-                        placeholder="Label, e.g. Revenue"
-                        value={kv.label}
-                        onChange={(e) => patchKpi(n.id, idx, "label", e.target.value)}
-                      />
-                    </div>
-                    <div className="col-span-6">
-                      <input
-                        className={inputCls}
-                        style={inputStyle}
-                        placeholder="Value"
-                        value={kv.value}
-                        onChange={(e) => patchKpi(n.id, idx, "value", e.target.value)}
-                      />
-                    </div>
-                    <div className="col-span-1 flex justify-end">
-                      <button onClick={() => removeKpi(n.id, idx)} className="text-white/30 hover:text-[#EF4444]">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+      {notes.map((n) => {
+        const isEditing = editingId === n.id;
+        return (
+          <Card
+            key={n.id}
+            title={formatDate(n.date)}
+            action={
+              isEditing ? null : (
+                <div className="flex items-center gap-2">
+                  <EditButton onClick={() => setEditingId(n.id)} />
+                  <button onClick={() => removeNote(n.id)} className="text-white/30 hover:text-[#EF4444]">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )
+            }
+          >
+            {!isEditing ? (
+              <>
+                <div className="mb-3 whitespace-pre-wrap text-sm text-white/80">{n.notes || "—"}</div>
+                {n.kpis.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {n.kpis.map((kv, idx) => (
+                      <span key={idx} className="rounded px-2 py-1 text-xs" style={{ backgroundColor: "#0F1B2E", color: "#E5E7EB" }}>
+                        <span className="text-white/40">{kv.label || "—"}:</span> {kv.value || "—"}
+                      </span>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </Card>
-      ))}
+                )}
+              </>
+            ) : (
+              <>
+                <div className="mb-4 grid grid-cols-3 gap-4">
+                  <LabeledInput label="Meeting Date" value={n.date} onChange={(v) => patchNote(n.id, "date", v)} type="date" />
+                </div>
+                <LabeledTextarea label="Notes" value={n.notes} onChange={(v) => patchNote(n.id, "notes", v)} rows={3} />
 
-      <SaveBar onSave={save} saving={saving} />
+                <div className="mt-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-[11px] uppercase tracking-wider text-white/40">KPI Snapshot</span>
+                    <button onClick={() => addKpi(n.id)} className="inline-flex items-center gap-1 text-xs text-white/60 hover:text-[#FF7553]">
+                      <Plus className="h-3.5 w-3.5" /> Add KPI
+                    </button>
+                  </div>
+                  {n.kpis.length === 0 ? (
+                    <div className="text-xs text-white/30">No KPIs recorded for this meeting.</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {n.kpis.map((kv, idx) => (
+                        <div key={idx} className="grid grid-cols-12 items-end gap-2">
+                          <div className="col-span-5">
+                            <input
+                              className={inputCls}
+                              style={inputStyle}
+                              placeholder="Label, e.g. Revenue"
+                              value={kv.label}
+                              onChange={(e) => patchKpi(n.id, idx, "label", e.target.value)}
+                            />
+                          </div>
+                          <div className="col-span-6">
+                            <input
+                              className={inputCls}
+                              style={inputStyle}
+                              placeholder="Value"
+                              value={kv.value}
+                              onChange={(e) => patchKpi(n.id, idx, "value", e.target.value)}
+                            />
+                          </div>
+                          <div className="col-span-1 flex justify-end">
+                            <button onClick={() => removeKpi(n.id, idx)} className="text-white/30 hover:text-[#EF4444]">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="mt-4">
+                  <SaveCancelBar onSave={save} onCancel={() => cancel(n.id)} saving={saving} />
+                </div>
+              </>
+            )}
+          </Card>
+        );
+      })}
     </div>
   );
 }
@@ -1163,10 +1415,15 @@ function DSRAMaturityBanner({ company }: { company: Company }) {
 }
 
 function DSRATab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
-  const [items, setItems] = useState<DSRAInstrument[]>(company.dsra || []);
+  const saved = company.dsra || [];
+  const [editing, setEditing] = useState(false);
+  const [items, setItems] = useState<DSRAInstrument[]>(saved);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => setItems(company.dsra || []), [company.id]);
+  useEffect(() => {
+    setItems(company.dsra || []);
+    setEditing(false);
+  }, [company.id]);
 
   const addItem = () =>
     setItems((prev) => [
@@ -1196,26 +1453,89 @@ function DSRATab({ company, onUpdate }: { company: Company; onUpdate: (c: Compan
     setSaving(true);
     persist(company.id, { dsra: items }, onUpdate);
     setTimeout(() => setSaving(false), 300);
+    setEditing(false);
     toast.success("DSRA instruments saved.");
   };
 
-  const totalAmount = items.reduce((s, d) => s + (d.amount || 0), 0);
+  const cancel = () => {
+    setItems(company.dsra || []);
+    setEditing(false);
+  };
+
+  const startEdit = () => {
+    setItems(
+      company.dsra && company.dsra.length
+        ? company.dsra
+        : [
+            {
+              id: uid("dsra"),
+              bankName: "",
+              fdNumber: "",
+              creationDate: "",
+              maturityDate: "",
+              amount: 0,
+              roi: 0,
+              lienStatus: "Lien Pending" as LienStatus,
+            },
+          ],
+    );
+    setEditing(true);
+  };
+
+  const totalAmount = saved.reduce((s, d) => s + (d.amount || 0), 0);
+
+  if (!editing) {
+    return (
+      <div className="space-y-4">
+        <Card title="DSRA Summary" action={saved.length > 0 ? <EditButton onClick={startEdit} /> : null}>
+          <div className="grid grid-cols-3 gap-4">
+            <Field label="Instruments" value={String(saved.length)} />
+            <Field label="Total Amount" value={formatCr(totalAmount / 1e7 < 0.001 ? 0 : totalAmount / 1e7)} />
+          </div>
+        </Card>
+
+        {saved.length === 0 ? (
+          <EmptyState label="No FD / MF instruments recorded yet." onAdd={startEdit} />
+        ) : (
+          saved.map((d, idx) => {
+            const days = daysUntil(d.maturityDate);
+            const isUpcoming = days !== null && days >= 0 && days <= MATURITY_WARNING_DAYS;
+            return (
+              <Card
+                key={d.id}
+                title={`Instrument ${idx + 1}`}
+                action={
+                  isUpcoming ? (
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide" style={{ backgroundColor: "#F59E0B20", color: "#F59E0B" }}>
+                      <Clock className="h-3 w-3" /> Maturing in {days}d
+                    </span>
+                  ) : null
+                }
+              >
+                <div className="grid grid-cols-4 gap-4">
+                  <Field label="Bank Name" value={d.bankName} />
+                  <Field label="FD Number" value={d.fdNumber} />
+                  <Field label="Creation Date" value={formatDate(d.creationDate)} />
+                  <Field label="Maturity Date" value={formatDate(d.maturityDate)} />
+                  <Field label="Amount (₹)" value={d.amount ? d.amount.toLocaleString("en-IN") : "—"} />
+                  <Field label="ROI (% p.a.)" value={d.roi || "—"} />
+                  <Field label="Lien Status" value={d.lienStatus} />
+                </div>
+                {d.notes && (
+                  <div className="mt-4">
+                    <Field label="Notes" value={d.notes} />
+                  </div>
+                )}
+              </Card>
+            );
+          })
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      <Card title="DSRA Summary">
-        <div className="grid grid-cols-3 gap-4">
-          <Field label="Instruments" value={String(items.length)} />
-          <Field label="Total Amount" value={formatCr(totalAmount / 1e7 < 0.001 ? 0 : totalAmount / 1e7)} />
-        </div>
-      </Card>
-
-      {items.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-sm text-white/40" style={{ borderColor: "#1A2B47" }}>
-          No FD / MF instruments recorded yet.
-        </div>
-      )}
-
       {items.map((d, idx) => {
         const days = daysUntil(d.maturityDate);
         const isUpcoming = days !== null && days >= 0 && days <= MATURITY_WARNING_DAYS;
@@ -1260,9 +1580,8 @@ function DSRATab({ company, onUpdate }: { company: Company; onUpdate: (c: Compan
         >
           <Plus className="h-3.5 w-3.5" /> Add Instrument
         </button>
-        <SaveBar onSave={save} saving={saving} />
+        <SaveCancelBar onSave={save} onCancel={cancel} saving={saving} />
       </div>
     </div>
   );
 }
-        
