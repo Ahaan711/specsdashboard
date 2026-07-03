@@ -1,14 +1,18 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   getCompany,
   updateCompany,
+  deleteCompanyLocal,
   normalizeCovenants,
   formatCr,
   formatDate,
   SECTOR_COLORS,
   STATUS_COLORS,
   type Company,
+  type Sector,
+  type InvestmentType,
+  type CompanyStatus,
   type TermSheetData,
   type CovenantItem,
   type SecurityItem,
@@ -20,12 +24,14 @@ import {
   type MeetingNote,
   type DSRAInstrument,
   type LienStatus,
+  type KeyPerson,
 } from "@/lib/portfolio-data";
 import {
   uploadDocument,
   listDocuments,
   getDocumentSignedUrl,
   deleteDocument,
+  deleteCompanyRemote,
   pushCompaniesDebounced,
   type DocumentRow,
 } from "@/lib/cloud-sync";
@@ -50,6 +56,10 @@ export const Route = createFileRoute("/portfolio/$companyId")({
   component: CompanyDetail,
 });
 
+const SECTORS: Sector[] = ["NBFC", "Renewable Energy", "Solar PV Mfg", "rPET Recycling", "AIF", "Manufacturing", "Infrastructure", "Other"];
+const INVESTMENT_TYPES: InvestmentType[] = ["NCD", "CCD", "Equity", "Structured Equity", "Senior Secured", "Structured"];
+const COMPANY_STATUSES: CompanyStatus[] = ["Active", "Watch", "Exit", "Pipeline"];
+
 // Persist a company patch to localStorage immediately, reflect it in local
 // component state, and push to the cloud (debounced). Every tab below saves
 // through this single path so nothing forgets the cloud push -- previously
@@ -73,14 +83,33 @@ function uid(prefix: string) {
 
 function CompanyDetail() {
   const { companyId } = Route.useParams();
+  const navigate = useNavigate();
   const [company, setCompany] = useState<Company | undefined>();
   const [missing, setMissing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const c = getCompany(companyId);
     if (!c) setMissing(true);
     else setCompany(c);
   }, [companyId]);
+
+  const handleDelete = async () => {
+    if (!company) return;
+    if (!window.confirm(`Delete ${company.name} entirely? This removes all its data — term sheet, security, compliance history, everything. This can't be undone.`)) {
+      return;
+    }
+    setDeleting(true);
+    deleteCompanyLocal(company.id);
+    const res = await deleteCompanyRemote(company.id);
+    setDeleting(false);
+    if (!res.ok && !res.notProvisioned) {
+      toast.error(`Removed locally, but cloud delete failed: ${res.error || "unknown error"}. It may reappear after a sync — try deleting again once the cloud is reachable.`);
+    } else {
+      toast.success(`${company.name} deleted.`);
+    }
+    navigate({ to: "/portfolio" });
+  };
 
   if (missing) {
     return (
@@ -94,12 +123,22 @@ function CompanyDetail() {
 
   return (
     <div className="p-6">
-      <Link
-        to="/portfolio"
-        className="mb-4 inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-[#FF7553]"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" /> Back to Portfolio
-      </Link>
+      <div className="mb-4 flex items-center justify-between">
+        <Link
+          to="/portfolio"
+          className="inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-[#FF7553]"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to Portfolio
+        </Link>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="inline-flex items-center gap-1.5 text-xs text-white/30 hover:text-[#EF4444] disabled:opacity-50"
+        >
+          {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+          Delete Company
+        </button>
+      </div>
 
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-6">
@@ -180,7 +219,7 @@ function CompanyDetail() {
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
-          <OverviewTab company={company} />
+          <OverviewTab company={company} onUpdate={setCompany} />
         </TabsContent>
         <TabsContent value="termsheet" className="mt-4">
           <TermSheetTab company={company} onUpdate={setCompany} />
@@ -297,59 +336,256 @@ function StatusPill({ status, colorMap }: { status: string; colorMap: Record<str
 
 // =================== Overview (unchanged) ===================
 
-function OverviewTab({ company }: { company: Company }) {
+type OverviewForm = {
+  sector: Sector;
+  subSector: string;
+  cin: string;
+  website: string;
+  description: string;
+  investmentType: InvestmentType;
+  exposureCr: string;
+  entryDate: string;
+  maturityDate: string;
+  tenor: string;
+  status: CompanyStatus;
+  watchReason: string;
+};
+
+function toOverviewForm(c: Company): OverviewForm {
+  return {
+    sector: c.sector,
+    subSector: c.subSector || "",
+    cin: c.cin || "",
+    website: c.website || "",
+    description: c.description || "",
+    investmentType: c.investmentType,
+    exposureCr: String(c.exposureCr ?? ""),
+    entryDate: c.entryDate || "",
+    maturityDate: c.maturityDate || "",
+    tenor: c.tenor || "",
+    status: c.status,
+    watchReason: c.watchReason || "",
+  };
+}
+
+function OverviewTab({ company, onUpdate }: { company: Company; onUpdate: (c: Company) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<OverviewForm>(toOverviewForm(company));
+  const [people, setPeople] = useState<KeyPerson[]>(company.keyPeople || []);
+  const [share, setShare] = useState({
+    promoter: company.shareholding?.promoter ?? 0,
+    institutional: company.shareholding?.institutional ?? 0,
+    public: company.shareholding?.public ?? 0,
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(toOverviewForm(company));
+    setPeople(company.keyPeople || []);
+    setShare({
+      promoter: company.shareholding?.promoter ?? 0,
+      institutional: company.shareholding?.institutional ?? 0,
+      public: company.shareholding?.public ?? 0,
+    });
+    setEditing(false);
+  }, [company.id]);
+
+  const set = (k: keyof OverviewForm, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const addPerson = () => setPeople((p) => [...p, { name: "", designation: "" }]);
+  const removePerson = (idx: number) => setPeople((p) => p.filter((_, i) => i !== idx));
+  const patchPerson = (idx: number, k: keyof KeyPerson, v: string) =>
+    setPeople((p) => p.map((x, i) => (i === idx ? { ...x, [k]: v } : x)));
+
+  const save = () => {
+    if (!form.exposureCr.trim() || isNaN(Number(form.exposureCr))) {
+      toast.error("Exposure must be a number.");
+      return;
+    }
+    setSaving(true);
+    persist(
+      company.id,
+      {
+        sector: form.sector,
+        subSector: form.subSector.trim() || undefined,
+        cin: form.cin.trim() || undefined,
+        website: form.website.trim() || undefined,
+        description: form.description.trim() || undefined,
+        investmentType: form.investmentType,
+        exposureCr: Number(form.exposureCr),
+        entryDate: form.entryDate,
+        maturityDate: form.maturityDate || undefined,
+        tenor: form.tenor.trim() || undefined,
+        status: form.status,
+        watchReason: form.status === "Watch" ? form.watchReason.trim() || undefined : undefined,
+        keyPeople: people.filter((p) => p.name.trim()),
+        shareholding: share,
+      },
+      onUpdate,
+    );
+    setTimeout(() => setSaving(false), 300);
+    setEditing(false);
+    toast.success("Overview saved.");
+  };
+
+  const cancel = () => {
+    setForm(toOverviewForm(company));
+    setPeople(company.keyPeople || []);
+    setShare({
+      promoter: company.shareholding?.promoter ?? 0,
+      institutional: company.shareholding?.institutional ?? 0,
+      public: company.shareholding?.public ?? 0,
+    });
+    setEditing(false);
+  };
+
+  if (!editing) {
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <EditButton onClick={() => setEditing(true)} />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Card title="Company">
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Sector" value={company.sector} />
+              <Field label="Sub-sector" value={company.subSector} />
+              <Field label="CIN" value={company.cin} />
+              <Field label="Website" value={company.website} />
+            </div>
+            {company.description && (
+              <div className="mt-4">
+                <Field label="Description" value={company.description} />
+              </div>
+            )}
+          </Card>
+          <Card title="Our Investment">
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Instrument" value={company.investmentType} />
+              <Field label="Exposure" value={formatCr(company.exposureCr)} />
+              <Field label="Entry Date" value={formatDate(company.entryDate)} />
+              <Field label="Maturity" value={formatDate(company.maturityDate)} />
+              <Field label="Tenor" value={company.tenor} />
+              <Field label="Status" value={company.status} />
+            </div>
+          </Card>
+          <Card title="Key People">
+            {(company.keyPeople || []).length === 0 ? (
+              <div className="text-sm text-white/40">No key people recorded.</div>
+            ) : (
+              <ul className="space-y-2">
+                {company.keyPeople.map((p, i) => (
+                  <li key={i} className="flex justify-between text-sm">
+                    <span className="text-white/90">{p.name}</span>
+                    <span className="text-white/50">{p.designation}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+          <Card title="Shareholding">
+            {company.shareholding ? (
+              <div className="space-y-2">
+                {Object.entries(company.shareholding).map(([k, v]) => (
+                  <div key={k}>
+                    <div className="mb-1 flex justify-between text-xs">
+                      <span className="capitalize text-white/60">{k}</span>
+                      <span className="text-white/90">{v}%</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-[#1A2B47]">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${v}%`, backgroundColor: "#FF7553" }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-white/40">No shareholding data.</div>
+            )}
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="space-y-4">
       <Card title="Company">
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Sector" value={company.sector} />
-          <Field label="Sub-sector" value={company.subSector} />
-          <Field label="CIN" value={company.cin} />
-          <Field label="Website" value={company.website} />
+          <LabeledSelect label="Sector" value={form.sector} onChange={(v) => set("sector", v)} options={SECTORS} />
+          <LabeledInput label="Sub-sector" value={form.subSector} onChange={(v) => set("subSector", v)} />
+          <LabeledInput label="CIN" value={form.cin} onChange={(v) => set("cin", v)} />
+          <LabeledInput label="Website" value={form.website} onChange={(v) => set("website", v)} />
+        </div>
+        <div className="mt-4">
+          <LabeledTextarea label="Description" value={form.description} onChange={(v) => set("description", v)} rows={2} />
         </div>
       </Card>
+
       <Card title="Our Investment">
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Instrument" value={company.investmentType} />
-          <Field label="Exposure" value={formatCr(company.exposureCr)} />
-          <Field label="Entry Date" value={formatDate(company.entryDate)} />
-          <Field label="Maturity" value={formatDate(company.maturityDate)} />
-          <Field label="Tenor" value={company.tenor} />
-          <Field label="Status" value={company.status} />
+        <div className="grid grid-cols-3 gap-4">
+          <LabeledSelect label="Instrument" value={form.investmentType} onChange={(v) => set("investmentType", v)} options={INVESTMENT_TYPES} />
+          <LabeledInput label="Exposure (₹ Cr)" value={form.exposureCr} onChange={(v) => set("exposureCr", v)} type="number" />
+          <LabeledInput label="Tenor" value={form.tenor} onChange={(v) => set("tenor", v)} />
+          <LabeledInput label="Entry Date" value={form.entryDate} onChange={(v) => set("entryDate", v)} type="date" />
+          <LabeledInput label="Maturity Date" value={form.maturityDate} onChange={(v) => set("maturityDate", v)} type="date" />
+          <LabeledSelect label="Status" value={form.status} onChange={(v) => set("status", v)} options={COMPANY_STATUSES} />
         </div>
+        {form.status === "Watch" && (
+          <div className="mt-4">
+            <LabeledTextarea label="Watch Reason" value={form.watchReason} onChange={(v) => set("watchReason", v)} rows={2} />
+          </div>
+        )}
       </Card>
-      <Card title="Key People">
-        <ul className="space-y-2">
-          {company.keyPeople.map((p) => (
-            <li key={p.name} className="flex justify-between text-sm">
-              <span className="text-white/90">{p.name}</span>
-              <span className="text-white/50">{p.designation}</span>
-            </li>
-          ))}
-        </ul>
-      </Card>
-      <Card title="Shareholding">
-        {company.shareholding ? (
+
+      <Card
+        title="Key People"
+        action={
+          <button onClick={addPerson} className="inline-flex items-center gap-1 text-xs text-white/60 hover:text-[#FF7553]">
+            <Plus className="h-3.5 w-3.5" /> Add Person
+          </button>
+        }
+      >
+        {people.length === 0 ? (
+          <div className="py-3 text-center text-xs text-white/30">No key people added.</div>
+        ) : (
           <div className="space-y-2">
-            {Object.entries(company.shareholding).map(([k, v]) => (
-              <div key={k}>
-                <div className="mb-1 flex justify-between text-xs">
-                  <span className="capitalize text-white/60">{k}</span>
-                  <span className="text-white/90">{v}%</span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-[#1A2B47]">
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: `${v}%`, backgroundColor: "#FF7553" }}
-                  />
-                </div>
+            {people.map((p, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <input
+                  className={`${inputCls} flex-1`}
+                  style={inputStyle}
+                  placeholder="Name"
+                  value={p.name}
+                  onChange={(e) => patchPerson(idx, "name", e.target.value)}
+                />
+                <input
+                  className={`${inputCls} flex-1`}
+                  style={inputStyle}
+                  placeholder="Designation"
+                  value={p.designation}
+                  onChange={(e) => patchPerson(idx, "designation", e.target.value)}
+                />
+                <button onClick={() => removePerson(idx)} className="shrink-0 text-white/30 hover:text-[#EF4444]">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
               </div>
             ))}
           </div>
-        ) : (
-          <div className="text-sm text-white/40">No shareholding data.</div>
         )}
       </Card>
+
+      <Card title="Shareholding (%)">
+        <div className="grid grid-cols-3 gap-4">
+          <LabeledInput label="Promoter" value={share.promoter} onChange={(v) => setShare((s) => ({ ...s, promoter: Number(v) || 0 }))} type="number" />
+          <LabeledInput label="Institutional" value={share.institutional} onChange={(v) => setShare((s) => ({ ...s, institutional: Number(v) || 0 }))} type="number" />
+          <LabeledInput label="Public" value={share.public} onChange={(v) => setShare((s) => ({ ...s, public: Number(v) || 0 }))} type="number" />
+        </div>
+      </Card>
+
+      <SaveCancelBar onSave={save} onCancel={cancel} saving={saving} />
     </div>
   );
 }
