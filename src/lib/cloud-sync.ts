@@ -79,7 +79,30 @@ function errorFields(err: { code?: string; message?: string } | null | undefined
 export async function pushCompanies(): Promise<Result> {
   const list = loadCompanies();
   if (list.length === 0) return { ok: true };
-  const rows = list.map((c) => ({
+
+  // Respect tombstones before upserting -- otherwise a device with a stale
+  // local copy of a since-deleted company would resurrect it here on its
+  // next unrelated save. See deleted_company_ids migration for context.
+  const { data: tombstones, error: tErr } = await supabase
+    .from("deleted_company_ids")
+    .select("id");
+  if (tErr) {
+    // Tombstone check failing shouldn't block a normal push entirely, but we
+    // also shouldn't risk resurrecting a deleted row -- fail safe by
+    // reporting the error rather than pushing blind.
+    return { ok: false, ...errorFields(tErr) };
+  }
+  const deletedIds = new Set((tombstones || []).map((t: { id: string }) => t.id));
+
+  const filtered = list.filter((c) => !deletedIds.has(c.id));
+  if (filtered.length !== list.length) {
+    // Self-heal: this device's local cache still had a company that's been
+    // deleted elsewhere. Drop it locally too instead of trying again next push.
+    saveCompanies(filtered);
+  }
+  if (filtered.length === 0) return { ok: true };
+
+  const rows = filtered.map((c) => ({
     id: c.id,
     payload: c,
     updated_at: new Date().toISOString(),
@@ -89,6 +112,23 @@ export async function pushCompanies(): Promise<Result> {
     .upsert(rows, { onConflict: "id" });
   if (error) {
     return { ok: false, ...errorFields(error) };
+  }
+  return { ok: true };
+}
+
+// Delete a company everywhere: removes the row from portfolio_companies
+// immediately (not just by omission from a future push) and records a
+// tombstone so no other device's stale local cache can resurrect it.
+export async function deleteCompanyRemote(id: string): Promise<Result> {
+  const { error: delErr } = await supabase.from("portfolio_companies").delete().eq("id", id);
+  if (delErr) {
+    return { ok: false, ...errorFields(delErr) };
+  }
+  const { error: tombErr } = await supabase
+    .from("deleted_company_ids")
+    .upsert([{ id, deleted_at: new Date().toISOString() }], { onConflict: "id" });
+  if (tombErr) {
+    return { ok: false, ...errorFields(tombErr) };
   }
   return { ok: true };
 }
@@ -185,7 +225,11 @@ export async function pullCompaniesOverwrite(): Promise<Result<Company[]>> {
   if (error) {
     return { ok: false, ...errorFields(error) };
   }
-  const list = (data || []).map((row: { payload: Company }) => row.payload);
+  const { data: tombstones } = await supabase.from("deleted_company_ids").select("id");
+  const deletedIds = new Set((tombstones || []).map((t: { id: string }) => t.id));
+  const list = (data || [])
+    .map((row: { payload: Company }) => row.payload)
+    .filter((c: Company) => !deletedIds.has(c.id));
   saveCompanies(list);
   return { ok: true, data: list };
 }
