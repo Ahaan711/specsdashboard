@@ -181,6 +181,11 @@ export function updateCompany(id: string, patch: Partial<Company>) {
   return next.find((c) => c.id === id);
 }
 
+export function deleteCompanyLocal(id: string) {
+  const list = loadCompanies();
+  saveCompanies(list.filter((c) => c.id !== id));
+}
+
 export const SECTOR_COLORS: Record<Sector, string> = {
   NBFC: "#3B82F6",
   "Renewable Energy": "#10B981",
