@@ -1264,6 +1264,7 @@ function CovenantComplianceTab({ company, onUpdate }: { company: Company; onUpda
         </>
       )}
 
+      <div id="covenant-log-editor">
       <Card title="Log Compliance for a Period">
         <div className="mb-4 max-w-xs">
           <LabeledInput label="Reporting Period" value={period} onChange={setPeriod} placeholder='e.g. "Q3 FY26"' />
@@ -1317,16 +1318,36 @@ function CovenantComplianceTab({ company, onUpdate }: { company: Company; onUpda
           </div>
         )}
       </Card>
+      </div>
 
       {periodsLogged.length > 0 && (
         <Card title="Compliance History">
+          <div className="mb-2 text-xs text-white/40">
+            Click a period below to load it above for correction — safer than retyping the period name, which could accidentally create a new column instead of editing the existing one.
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-white/40">
                   <th className="py-2 pr-4 font-medium">Covenant</th>
                   {periodsLogged.map((p) => (
-                    <th key={p} className="px-3 py-2 text-center font-medium">{p}</th>
+                    <th key={p} className="px-3 py-2 text-center font-medium">
+                      <button
+                        onClick={() => {
+                          setPeriod(p);
+                          document.getElementById("covenant-log-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }}
+                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-[#1C3151]"
+                        style={{
+                          color: p === period ? "#FF7553" : undefined,
+                          backgroundColor: p === period ? "#FF755315" : undefined,
+                        }}
+                        title={`Edit ${p}`}
+                      >
+                        <Pencil className="h-2.5 w-2.5" />
+                        {p}
+                      </button>
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -1337,7 +1358,11 @@ function CovenantComplianceTab({ company, onUpdate }: { company: Company; onUpda
                     {periodsLogged.map((p) => {
                       const e = statusFor(c.id, p);
                       return (
-                        <td key={p} className="px-3 py-2 text-center align-top">
+                        <td
+                          key={p}
+                          className="px-3 py-2 text-center align-top"
+                          style={{ backgroundColor: p === period ? "#FF755308" : undefined }}
+                        >
                           {e ? (
                             <div className="flex flex-col items-center gap-1">
                               <StatusPill status={e.status} colorMap={COVENANT_STATUS_COLORS} />
