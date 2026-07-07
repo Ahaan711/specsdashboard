@@ -133,7 +133,8 @@ function CompanyDetail() {
         <button
           onClick={handleDelete}
           disabled={deleting}
-          className="inline-flex items-center gap-1.5 text-xs text-white/30 hover:text-[#EF4444] disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs text-[#EF4444]/80 hover:bg-[#EF444415] hover:text-[#EF4444] disabled:opacity-50"
+          style={{ borderColor: "#EF444440" }}
         >
           {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
           Delete Company
@@ -1156,6 +1157,23 @@ function CovenantComplianceTab({ company, onUpdate }: { company: Company; onUpda
     });
   };
 
+  const setNote = (covenantId: string, p: string, note: string) => {
+    if (!p.trim()) {
+      toast.error('Enter a reporting period first (e.g. "Q3 FY26").');
+      return;
+    }
+    setLogDirty(true);
+    setEntries((prev) => {
+      const existing = prev.find((e) => e.covenantId === covenantId && e.period === p);
+      if (existing) {
+        return prev.map((e) => (e === existing ? { ...e, note, recordedAt: new Date().toISOString() } : e));
+      }
+      // Writing a note before picking a status: create the entry as
+      // "Not Tested" by default rather than forcing a status choice first.
+      return [...prev, { id: uid("cce"), covenantId, period: p, status: "Not Tested", note, recordedAt: new Date().toISOString() }];
+    });
+  };
+
   const saveDefs = () => {
     setDefsSaving(true);
     persist(company.id, { termSheet: { ...company.termSheet, covenants: defs } }, onUpdate);
@@ -1190,7 +1208,7 @@ function CovenantComplianceTab({ company, onUpdate }: { company: Company; onUpda
             <div className="space-y-2">
               {savedDefs.map((c) => (
                 <div key={c.id} className="flex items-center justify-between border-b py-2" style={{ borderColor: "#1A2B47" }}>
-                  <span className="text-sm text-white/90">{c.text || "(untitled)"}</span>
+                  <span className="text-sm font-semibold text-white">{c.text || "(untitled)"}</span>
                   <div className="flex items-center gap-3 text-xs text-white/50">
                     <span className="capitalize">{c.type}</span>
                     <span>{c.threshold || "—"}</span>
@@ -1257,24 +1275,34 @@ function CovenantComplianceTab({ company, onUpdate }: { company: Company; onUpda
             {activeDefs.map((c) => {
               const entry = period ? statusFor(c.id, period) : undefined;
               return (
-                <div key={c.id} className="flex items-center justify-between gap-3 border-b py-2" style={{ borderColor: "#1A2B47" }}>
-                  <span className="text-sm text-white/80">{c.text || "(untitled covenant)"}</span>
-                  <div className="flex gap-1.5">
-                    {(["Compliant", "Breach", "Not Tested"] as CovenantComplianceStatus[]).map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => setStatus(c.id, period, s)}
-                        className="rounded px-2 py-1 text-[10px] font-medium uppercase tracking-wide transition-opacity"
-                        style={{
-                          backgroundColor: COVENANT_STATUS_COLORS[s].bg,
-                          color: COVENANT_STATUS_COLORS[s].c,
-                          opacity: entry?.status === s ? 1 : 0.35,
-                        }}
-                      >
-                        {s}
-                      </button>
-                    ))}
+                <div key={c.id} className="border-b py-2.5" style={{ borderColor: "#1A2B47" }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-white/90">{c.text || "(untitled covenant)"}</span>
+                    <div className="flex gap-1.5">
+                      {(["Compliant", "Breach", "Not Tested"] as CovenantComplianceStatus[]).map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => setStatus(c.id, period, s)}
+                          className="rounded px-2 py-1 text-[10px] font-medium uppercase tracking-wide transition-opacity"
+                          style={{
+                            backgroundColor: COVENANT_STATUS_COLORS[s].bg,
+                            color: COVENANT_STATUS_COLORS[s].c,
+                            opacity: entry?.status === s ? 1 : 0.35,
+                          }}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
                   </div>
+                  <input
+                    className={`${inputCls} mt-2`}
+                    style={{ ...inputStyle, height: 32 }}
+                    placeholder="Actual value / commentary for this period (optional)"
+                    value={entry?.note || ""}
+                    disabled={!period.trim()}
+                    onChange={(e) => setNote(c.id, period, e.target.value)}
+                  />
                 </div>
               );
             })}
@@ -1305,12 +1333,19 @@ function CovenantComplianceTab({ company, onUpdate }: { company: Company; onUpda
               <tbody>
                 {activeDefs.map((c) => (
                   <tr key={c.id} className="border-t" style={{ borderColor: "#1A2B47" }}>
-                    <td className="py-2 pr-4 text-white/80">{c.text || "(untitled)"}</td>
+                    <td className="py-2 pr-4 font-semibold text-white">{c.text || "(untitled)"}</td>
                     {periodsLogged.map((p) => {
                       const e = statusFor(c.id, p);
                       return (
-                        <td key={p} className="px-3 py-2 text-center">
-                          {e ? <StatusPill status={e.status} colorMap={COVENANT_STATUS_COLORS} /> : <span className="text-white/20">—</span>}
+                        <td key={p} className="px-3 py-2 text-center align-top">
+                          {e ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <StatusPill status={e.status} colorMap={COVENANT_STATUS_COLORS} />
+                              {e.note && <div className="max-w-[160px] whitespace-normal text-[11px] text-white/50">{e.note}</div>}
+                            </div>
+                          ) : (
+                            <span className="text-white/20">—</span>
+                          )}
                         </td>
                       );
                     })}
