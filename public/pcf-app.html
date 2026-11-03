@@ -244,6 +244,7 @@
   .rej-stage-1{background:rgba(251,191,36,.18);color:var(--amber)}
   .rej-stage-2{background:rgba(255,117,83,.2);color:var(--orange)}
   .rej-stage-3{background:rgba(248,113,113,.2);color:var(--red-neg)}
+  .rej-stage-unstaged{background:rgba(255,255,255,.08);color:var(--text-dim)}
   .rej-reason{font-size:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text)}
   .rej-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
   .rej-collapse{border-top:1px dashed var(--border);padding-top:8px;margin-top:4px}
@@ -357,11 +358,12 @@
   </div>
 
   <div class="toolbar">
-    <input id="leadSearch" placeholder="Search company or notes..." class="grow" oninput="renderLeads()">
+    <input id="leadSearch" placeholder="Search company, notes or remarks..." class="grow" oninput="renderLeads()">
     <select id="leadFilterStage" onchange="renderLeads()">
       <option value="">Status</option>
       <option>Active</option><option>Passive</option>
       <option>Rejected – Stage 1</option><option>Rejected – Stage 2</option><option>Rejected – Stage 3</option>
+      <option value="Rejected">Rejected - unstaged</option>
       <option>Lost</option><option>Closed</option>
     </select>
     <select id="leadFilterSector" onchange="renderLeads()">
@@ -495,6 +497,7 @@
     <button data-rs="Rejected – Stage 1" onclick="setRejSubtab('Rejected – Stage 1')">Stage 1 <span class="count" id="rsCnt1">0</span></button>
     <button data-rs="Rejected – Stage 2" onclick="setRejSubtab('Rejected – Stage 2')">Stage 2 <span class="count" id="rsCnt2">0</span></button>
     <button data-rs="Rejected – Stage 3" onclick="setRejSubtab('Rejected – Stage 3')">Stage 3 <span class="count" id="rsCnt3">0</span></button>
+    <button data-rs="Rejected" onclick="setRejSubtab('Rejected')">Rejected - unstaged <span class="count" id="rsCntUn">0</span></button>
     <button data-rs="reeval" onclick="setRejSubtab('reeval')">Re-evaluate Queue <span class="count" id="rsCntRe">0</span></button>
   </div>
 
@@ -684,7 +687,7 @@
       <div class="form-row"><label>Referrer Contact (phone / email)</label><input name="referredContact" id="leadReferredContact" placeholder="+91… or name@firm.com"></div>
       <div class="form-row"><label>Credit Rating</label><input name="creditRating" placeholder="e.g. AA-, BBB+, Unrated"></div>
       <div class="form-row"><label>Rating Rationale (PDF/Doc) <span style="font-weight:400;color:var(--muted);font-size:11px">— rating auto-extracted on upload</span></label>
-        <input type="file" id="leadRatingRationaleFile" accept=".pdf,.docx,.doc,.txt" style="font-size:12px" onchange="autoExtractRating(this)">
+        <input type="file" id="leadRatingRationaleFile" accept=".pdf,.docx,.txt" style="font-size:12px" onchange="autoExtractRating(this)">
         <div id="leadRatingRationaleHint" style="font-size:11px;color:var(--text-dim);margin-top:4px"></div>
       </div>
       <div class="form-row"><label>Status *</label><select name="stage" required onchange="toggleLostFields(this.value)">
@@ -701,7 +704,7 @@
       </div>
       <div class="form-row full">
         <label>Pre-DD Note (PDF/Doc) <span style="font-weight:400;color:var(--muted);font-size:11px">— uploaded note will be auto-summarized in the lead detail view</span></label>
-        <input type="file" id="leadPreDDFile" accept=".pdf,.docx,.doc,.txt" style="font-size:12px">
+        <input type="file" id="leadPreDDFile" accept=".pdf,.docx,.txt" style="font-size:12px">
         <div id="leadPreDDHint" style="font-size:11px;color:var(--text-dim);margin-top:4px"></div>
       </div>
     </div>
@@ -746,7 +749,7 @@
       <div class="form-row"><label>Disbursement Date *</label><input type="date" name="startDate" required></div>
       <div class="form-row"><label>Repayment Type</label><select name="repayType">
         <option>Bullet</option><option>Amortizing</option><option>Partially Amortizing</option></select></div>
-      <div class="form-row"><label>Amortization Frequency</label><select name="amortFreq">
+      <div class="form-row"><label>Payment Frequency</label><select name="amortFreq">
         <option>Monthly</option><option>Quarterly</option><option>Semi-Annual</option><option>Annual</option></select></div>
       <div class="form-row"><label>Moratorium (months)</label><input type="number" name="moratorium" value="0"></div>
       <div class="form-row"><label>Upfront Fee (%)</label><input type="number" step="0.01" name="upfrontFee" value="0"></div>
@@ -869,7 +872,7 @@
 /* =========================================================
    STATE & PERSISTENCE
    ========================================================= */
-const KEYS = { leads:'pcf_leads', deals:'pcf_deals', cashflows:'pcf_cashflows', fund:'pcf_fund', distributions:'pcf_distributions', documents:'pcf_documents', rev:'pcf_state_rev', deletedLeads:'pcf_deleted_leads' };
+const KEYS = { leads:'pcf_leads', deals:'pcf_deals', cashflows:'pcf_cashflows', fund:'pcf_fund', distributions:'pcf_distributions', documents:'pcf_documents', rev:'pcf_state_rev', deletedLeads:'pcf_deleted_leads', deletedDocs:'pcf_deleted_docs' };
 let state = {
   leads: JSON.parse(localStorage.getItem(KEYS.leads) || '[]'),
   deals: JSON.parse(localStorage.getItem(KEYS.deals) || '[]'),
@@ -882,19 +885,24 @@ let state = {
   // resurrect it -- see _mergeById and the tombstone-filtering step in
   // _hydrateFrom below.
   deletedLeadIds: JSON.parse(localStorage.getItem(KEYS.deletedLeads) || '[]'),
+  // Same mechanism for documents (PT-11).
+  deletedDocIds: JSON.parse(localStorage.getItem(KEYS.deletedDocs) || '[]'),
 };
 let _localRev = +(localStorage.getItem(KEYS.rev) || '0') || 0;
 let _storageWarningShown = false;
 function _persistLocalState(){
   try{
+    // Small records first and documents last: when storage is full, the documents write is the one that fails,
+    // and tombstones and the revision are already saved (PT-12).
+    localStorage.setItem(KEYS.deletedLeads, JSON.stringify(state.deletedLeadIds||[]));
+    localStorage.setItem(KEYS.deletedDocs, JSON.stringify(state.deletedDocIds||[]));
+    localStorage.setItem(KEYS.rev, String(_localRev));
     localStorage.setItem(KEYS.leads, JSON.stringify(state.leads));
     localStorage.setItem(KEYS.deals, JSON.stringify(state.deals));
     localStorage.setItem(KEYS.cashflows, JSON.stringify(state.cashflows));
     localStorage.setItem(KEYS.fund, JSON.stringify(state.fund));
     localStorage.setItem(KEYS.distributions, JSON.stringify(state.distributions));
     localStorage.setItem(KEYS.documents, JSON.stringify(state.documents));
-    localStorage.setItem(KEYS.deletedLeads, JSON.stringify(state.deletedLeadIds||[]));
-    localStorage.setItem(KEYS.rev, String(_localRev));
     return true;
   }catch(err){
     console.warn('[storage] local persist failed', err);
@@ -911,6 +919,19 @@ function save(){
   // Push immediately so an incoming remote sync can't overwrite in-flight local edits
   if(_sb && _cloudReady){ cloudPush(); } else { cloudPushDebounced(); }
 }
+// Every change to a shared record (lead, deal, document) goes through touch(): the merge below decides between two
+// copies of a record by updatedAt, so a change that is not stamped loses to any other client's copy (PT-03).
+function touch(rec){
+  if(rec) rec.updatedAt = new Date().toISOString();
+  return rec;
+}
+function _recTime(r){ return +new Date(r.updatedAt||r.rejectedAt||r.uploadedAt||0)||0; }
+// Equal timestamps: every client picks the same copy, so they converge instead of each keeping its own (PT-03).
+function _newerRecord(a, b){
+  const ta = _recTime(a), tb = _recTime(b);
+  if(ta !== tb) return ta > tb ? a : b;
+  return JSON.stringify(a) >= JSON.stringify(b) ? a : b;
+}
 // Merge two arrays of objects by id; prefer the entry with the newer updatedAt.
 // Items without updatedAt are kept (treated as oldest) so local-only entries survive.
 function _mergeById(localArr, remoteArr){
@@ -919,13 +940,45 @@ function _mergeById(localArr, remoteArr){
   (Array.isArray(remoteArr)?remoteArr:[]).forEach(r=>{
     if(!r || !r.id) return;
     const cur = map.get(r.id);
-    if(!cur){ map.set(r.id, r); return; }
-    const tCur = +new Date(cur.updatedAt||cur.rejectedAt||0)||0;
-    const tNew = +new Date(r.updatedAt||r.rejectedAt||0)||0;
-    // If remote is strictly newer, take it; otherwise keep local (protects unpushed edits)
-    map.set(r.id, tNew > tCur ? r : cur);
+    map.set(r.id, cur ? _newerRecord(cur, r) : r);
   });
   return Array.from(map.values());
+}
+// First load (and a first load retried after a failure): the cloud is canonical, except for local records changed
+// since this browser's last successful push, which are kept when newer than the cloud's copy. Local records the
+// cloud does not have and that were not changed since then are dropped, as a plain replace did (PT-05).
+function _mergeFirstLoad(localArr, remoteArr){
+  const since = _lastPushedAt();
+  const map = new Map();
+  (Array.isArray(remoteArr)?remoteArr:[]).forEach(r=>{ if(r && r.id) map.set(r.id, r); });
+  (Array.isArray(localArr)?localArr:[]).forEach(l=>{
+    if(!l || !l.id || _recTime(l) <= since) return;
+    const cur = map.get(l.id);
+    if(!cur || _recTime(l) > _recTime(cur)) map.set(l.id, l);
+  });
+  return Array.from(map.values());
+}
+// When this browser last pushed successfully. Set on first run, so seeded or previously synced records do not count
+// as unsynced changes; advanced on every successful push.
+const LAST_PUSHED_KEY = 'pcf_last_pushed_at';
+if(!localStorage.getItem(LAST_PUSHED_KEY)) { try{ localStorage.setItem(LAST_PUSHED_KEY, String(Date.now())); }catch(_){ } }
+function _lastPushedAt(){ return +(localStorage.getItem(LAST_PUSHED_KEY)||0) || 0; }
+function _hasUnsyncedChanges(){
+  const since = _lastPushedAt();
+  return ['leads','deals','documents'].some(k => (state[k]||[]).some(r => r && _recTime(r) > since))
+    || (state.deletedLeadIds||[]).concat(state.deletedDocIds||[]).some(t => +new Date(t.deletedAt||0) > since);
+}
+// Persistent notice while this browser holds changes the cloud has not received (PT-05).
+function _setSyncBanner(text){
+  let b = document.getElementById('syncBanner');
+  if(!text){ if(b) b.remove(); return; }
+  if(!b){
+    b = document.createElement('div');
+    b.id = 'syncBanner';
+    b.style.cssText = 'position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:9999;max-width:680px;padding:10px 14px;border-radius:8px;background:#7c2d12;color:#fff;font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,.4)';
+    document.body.appendChild(b);
+  }
+  b.textContent = text;
 }
 
 /* =========================================================
@@ -951,12 +1004,16 @@ let _cloudPullInFlight = false;
 let _cloudRetryTimer = null;
 let _cloudPollTimer = null;
 let _marketNewsInFlight = new Set();
+// Which Market Activity cards are open is this browser's view state, not part of the lead, so it is not saved or
+// synced (PT-25).
+const _marketExpandedIds = new Set();
 let _marketNewsFailedAt = new Map();
 let _creditsWarned = false;
 function _stateSnapshot(){
   return { leads:state.leads, deals:state.deals, cashflows:state.cashflows,
            fund:state.fund, distributions:state.distributions,
            deletedLeadIds: state.deletedLeadIds||[],
+           deletedDocIds: state.deletedDocIds||[],
            _client: CLIENT_ID, _ts: Date.now(), _rev: _localRev,
            _documentCount: (state.documents||[]).length };
 }
@@ -980,7 +1037,7 @@ function _documentRowsSnapshot(){
   const ts = Date.now();
   const keys = chunks.map((_, i) => `${DOCS_CHUNK_PREFIX}${i+1}`);
   return [
-    { key: DOCS_INDEX_KEY, value: { _client: CLIENT_ID, _ts: ts, _rev: _localRev, keys, count: docs.length }, updated_at: nowIso },
+    { key: DOCS_INDEX_KEY, value: { _client: CLIENT_ID, _ts: ts, _rev: _localRev, keys, count: docs.length, deletedDocIds: state.deletedDocIds||[] }, updated_at: nowIso },
     ...chunks.map((documents, i) => ({
       key: `${DOCS_CHUNK_PREFIX}${i+1}`,
       value: { _client: CLIENT_ID, _ts: ts, _rev: _localRev, documents },
@@ -990,7 +1047,34 @@ function _documentRowsSnapshot(){
 }
 function _applyDocumentsFromCloud(docs, opts){
   if(!Array.isArray(docs)) return;
-  state.documents = opts && opts.force ? docs.slice() : _mergeById(state.documents, docs);
+  state.documents = _withoutDeletedDocs(opts && opts.force ? _mergeFirstLoad(state.documents, docs) : _mergeById(state.documents, docs));
+}
+function _mergeDocTombstones(list){
+  if(!Array.isArray(list) || !list.length) return false;
+  const tMap = new Map((state.deletedDocIds||[]).map(t=>[t.id, t]));
+  let changed = false;
+  list.forEach(t=>{
+    if(!t || !t.id) return;
+    const cur = tMap.get(t.id);
+    if(!cur || +new Date(t.deletedAt||0) > +new Date(cur.deletedAt||0)){ tMap.set(t.id, t); changed = true; }
+  });
+  if(changed){
+    state.deletedDocIds = Array.from(tMap.values());
+    state.documents = _withoutDeletedDocs(state.documents);
+  }
+  return changed;
+}
+function _withoutDeletedDocs(docs){
+  const tMap = new Map((state.deletedDocIds||[]).map(t=>[t.id, t]));
+  if(!tMap.size) return docs || [];
+  return (docs||[]).filter(d=>{
+    const t = d && tMap.get(d.id);
+    return !t || _recTime(d) > (+new Date(t.deletedAt||0)||0);
+  });
+}
+function _tombstoneDocuments(ids){
+  const deletedAt = new Date().toISOString();
+  _mergeDocTombstones(ids.map(id=>({ id, deletedAt })));
 }
 function _hydrateFrom(payload, opts){
   opts = opts || {};
@@ -1034,15 +1118,21 @@ function _hydrateFrom(payload, opts){
     if(_cloudReady) cloudPushDebounced();
   }
 
+  _mergeDocTombstones(payload.deletedDocIds);
+
+  // Leads, deals and documents merge record by record on updatedAt whatever the sender's revision: a counter is
+  // per browser, so it cannot order edits made in two browsers (PT-04). The revision still gates the fields
+  // below that have no per-record timestamp.
   const incomingRev = +payload._rev || 0;
-  if(!opts.force && incomingRev && incomingRev < _localRev) return;
+  const staleRev = !opts.force && incomingRev && incomingRev < _localRev;
   if(incomingRev) _localRev = Math.max(_localRev, incomingRev);
   if(incomingRev) _lastHydratedRev = Math.max(_lastHydratedRev, incomingRev);
+  const mergeRecords = opts.force ? _mergeFirstLoad : _mergeById;
   // Merge by id so an incoming remote snapshot cannot wipe locally-edited
   // or locally-added entries that haven't been pushed yet.
   if(Array.isArray(payload.leads)){
     const remote = payload.leads.map(l=>l&&l.stage==='Completed'?{...l,stage:'Closed'}:l);
-    const merged = opts.force ? remote : _mergeById(state.leads, remote);
+    const merged = mergeRecords(state.leads, remote);
     // Drop anything with a tombstone, UNLESS it was touched again after the
     // delete was recorded (i.e. someone intentionally revived/re-added it
     // post-deletion -- a newer updatedAt than the tombstone wins).
@@ -1055,11 +1145,13 @@ function _hydrateFrom(payload, opts){
       return touchedAt > deletedAt;
     });
   }
-  if(Array.isArray(payload.deals)) state.deals = opts.force ? payload.deals.slice() : _mergeById(state.deals, payload.deals);
-  if(payload.cashflows && typeof payload.cashflows==='object') state.cashflows = opts.force ? {...payload.cashflows} : { ...(state.cashflows||{}), ...payload.cashflows };
-  if(payload.fund && typeof payload.fund==='object') state.fund = opts.force ? {...payload.fund} : { ...(state.fund||{}), ...payload.fund };
-  if(Array.isArray(payload.distributions)) state.distributions = opts.force ? payload.distributions.slice() : _mergeById(state.distributions, payload.distributions);
+  if(Array.isArray(payload.deals)) state.deals = mergeRecords(state.deals, payload.deals);
   if(Array.isArray(payload.documents)) _applyDocumentsFromCloud(payload.documents, opts);
+  if(!staleRev){
+    if(payload.cashflows && typeof payload.cashflows==='object') state.cashflows = opts.force ? {...payload.cashflows} : { ...(state.cashflows||{}), ...payload.cashflows };
+    if(payload.fund && typeof payload.fund==='object') state.fund = opts.force ? {...payload.fund} : { ...(state.fund||{}), ...payload.fund };
+    if(Array.isArray(payload.distributions)) state.distributions = opts.force ? payload.distributions.slice() : _mergeById(state.distributions, payload.distributions);
+  }
   // mirror to localStorage so offline still works
   _persistLocalState();
   // After absorbing remote, push our merged view back so other clients converge
@@ -1082,6 +1174,7 @@ async function _cloudHydrateDocuments(opts){
       .forEach(row=>{ if(Array.isArray(row?.value?.documents)) docs.push(...row.value.documents); });
     if(indexPayload._rev) _localRev = Math.max(_localRev, +indexPayload._rev || 0);
     if(indexPayload._rev) _lastHydratedRev = Math.max(_lastHydratedRev, +indexPayload._rev || 0);
+    _mergeDocTombstones(indexPayload.deletedDocIds);
     _applyDocumentsFromCloud(docs, opts || {});
     _persistLocalState();
     return true;
@@ -1143,19 +1236,27 @@ async function cloudPush(opts){
   if(!_sb || !_cloudReady) return;
   opts = opts || {};
   if(_cloudPushInFlight && !opts.flush) return;
+  const startedAt = Date.now();
   const snap = _stateSnapshot();
-  const docsHash = JSON.stringify((state.documents||[]).map(d=>[d.id,d.updatedAt||d.uploadedAt||'',d.name||'',d.size||0]));
-  const hash = JSON.stringify([snap._rev, snap.leads.length, snap.deals.length, snap._documentCount || 0, snap.distributions.length]);
+  // Everything about a document except its body (kept out of the hash for speed; its length stands in for it).
+  const docsHash = JSON.stringify([(state.documents||[]).map(d=>{ const { dataUrl, ...meta } = d||{}; return [meta, (dataUrl||'').length]; }), state.deletedDocIds||[]]);
+  // Record contents are part of the hash, so a merge that changed records without a local save is pushed back too.
+  const hash = JSON.stringify([snap._rev, snap.leads, snap.deals, snap.cashflows, snap.fund, snap.distributions, snap.deletedLeadIds, snap._documentCount || 0]);
   if(hash === _lastPushedHash && docsHash === _lastPushedDocsHash) return;
+  // SY-8: document rows are large; send them only when the document state changed since the last successful push.
+  const docsChanged = docsHash !== _lastPushedDocsHash;
   _cloudPushInFlight = true;
   _lastPushedHash = hash;
   _lastPushedDocsHash = docsHash;
   try{
     const rows = SHARED_KEYS.map(key => ({ key, value: snap, updated_at: new Date().toISOString() }));
-    const { error } = await _sb.from('shared_state').upsert(rows.concat(_documentRowsSnapshot()));
+    const { error } = await _sb.from('shared_state').upsert(docsChanged ? rows.concat(_documentRowsSnapshot()) : rows);
     if(error) throw error;
+    try{ localStorage.setItem(LAST_PUSHED_KEY, String(startedAt - 1)); }catch(_){ }
+    _setSyncBanner('');
   } catch(e){
     console.warn('[cloud] push ex', e);
+    _setSyncBanner(NOT_SYNCED_TEXT);
     _lastPushedHash = '';
     _lastPushedDocsHash = '';
     clearTimeout(_cloudRetryTimer);
@@ -1192,10 +1293,30 @@ function cloudSubscribe(){
     })
     .subscribe();
 }
+const NOT_SYNCED_TEXT = 'Not synced: the cloud is unreachable. Changes are kept in this browser and sent when the connection returns. Retrying…';
+// One sync attempt. Until a load has succeeded, every attempt is a first load, so a tab whose first load failed
+// keeps retrying and sends its changes once the cloud is back (PT-05).
+let _firstLoadDone = false;
+async function cloudSyncTick(){
+  if(_firstLoadDone) return cloudHydrate();
+  if(_cloudPullInFlight) return false;
+  const ok = await cloudHydrate({ force:true });
+  if(!ok){ _setSyncBanner(NOT_SYNCED_TEXT); return false; }
+  _firstLoadDone = true;
+  renderLeads();
+  try{ renderRejected(); renderReevalBanner(); }catch(_){ }
+  try{ if(document.getElementById('portfolio')?.classList.contains('active')) renderPortfolio(); }catch(_){ }
+  if(document.getElementById('documents')?.classList.contains('active')) renderDocuments();
+  cloudSubscribe();
+  if(_hasUnsyncedChanges()) await cloudPush();
+  else _setSyncBanner('');
+  toast('☁️ Live sync enabled');
+  return true;
+}
 function startCloudResilience(){
   if(_cloudPollTimer) clearInterval(_cloudPollTimer);
   _cloudPollTimer = setInterval(()=>{
-    if(!document.hidden) cloudHydrate();
+    if(!document.hidden) cloudSyncTick();
   }, 15000);
   const flushNow = ()=>{
     if(!_cloudReady) return;
@@ -1203,10 +1324,10 @@ function startCloudResilience(){
   };
   window.addEventListener('pagehide', flushNow);
   window.addEventListener('beforeunload', flushNow);
-  window.addEventListener('online', ()=>{ cloudHydrate(); cloudPushDebounced(); });
+  window.addEventListener('online', ()=>{ cloudSyncTick(); cloudPushDebounced(); });
   document.addEventListener('visibilitychange', ()=>{
     if(document.hidden) flushNow();
-    else cloudHydrate();
+    else cloudSyncTick();
   });
 }
 const uid = () => Math.random().toString(36).slice(2,10);
@@ -1281,59 +1402,112 @@ function freqMonths(f){return {Monthly:1,Quarterly:3,'Semi-Annual':6,Annual:12}[
 function addMonths(d,m){const x=new Date(d);x.setMonth(x.getMonth()+m);return x}
 function isoDate(d){return new Date(d).toISOString().slice(0,10)}
 
+// Schedule dates are calendar dates: 'YYYY-MM-DD' parsed and added as UTC calendar months, so a schedule is the same
+// in every timezone (PT-26), and a month-end start clamps to the last day of each target month (31-Jan + 1m =
+// 28/29-Feb, PT-18). Each date is computed from the start date, never from the previous payment date.
+function _schedYMD(d){
+  if(typeof d === 'string' && /^\d{4}-\d{2}-\d{2}/.test(d)){
+    const y = +d.slice(0,4), m = +d.slice(5,7)-1, day = +d.slice(8,10);
+    const x = new Date(Date.UTC(y, m, day));
+    if(!isNaN(x) && x.getUTCMonth()===m && x.getUTCDate()===day) return x;
+    throw new RangeError('Invalid time value');
+  }
+  const x = new Date(d);
+  if(isNaN(x)) throw new RangeError('Invalid time value');
+  return new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate()));
+}
+function _schedAddMonths(startUTC, m){
+  const total = startUTC.getUTCMonth() + m;
+  const y = startUTC.getUTCFullYear() + Math.floor(total/12), mo = ((total%12)+12)%12;
+  const last = new Date(Date.UTC(y, mo+1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, mo, Math.min(startUTC.getUTCDate(), last)));
+}
+const _DAY_MS = 86400000;
+
 /**
  * Generates schedule from deal parameters.
  * size in ₹Cr; coupon % p.a.; returns array of {date, period, opening, principal, interest, total, closing}
+ *
+ * Periods run every `freq` months from the start date; a tenor that is not a multiple of the frequency ends with a
+ * shorter final period at exactly start + tenor, whose interest is pro-rated by its months (PT-19). Whatever the
+ * moratorium, the final period repays the whole outstanding balance, so principal is never left unpaid (PT-01).
+ * With tranches, interest accrues only on money already drawn: a tranche drawn on or before a period's start
+ * earns the full period, one drawn inside a period earns from its draw date (days/365), and one drawn on the
+ * period's end date starts earning in the next period (PT-02).
  */
 function generateSchedule(deal){
-  const principal = +deal.size;
   const annualRate = +deal.coupon/100;
   const tenor = +deal.tenor;
-  const start = new Date(deal.startDate);
   const morat = +(deal.moratorium||0);
   const freq = freqMonths(deal.amortFreq||'Quarterly');
   const repay = deal.repayType||'Bullet';
   const upfrontFee = +(deal.upfrontFee||0)/100;
-  const periodicRate = annualRate * freq/12;
+
+  const draws = (Array.isArray(deal.tranches) ? deal.tranches : [])
+    .filter(t => t && t.date && isFinite(+t.amount) && +t.amount > 0)
+    .map(t => ({ date:_schedYMD(t.date), amount:+t.amount }))
+    .sort((a,b) => a.date - b.date);
+  const tranched = draws.length > 0;
+  // Tranched: the loan is what is actually lent, and the schedule starts at the earliest draw unless a start date is given.
+  const principal = tranched ? draws.reduce((a,t) => a + t.amount, 0) : +deal.size;
+  const start = deal.startDate ? _schedYMD(deal.startDate) : (tranched ? draws[0].date : _schedYMD(deal.startDate));
+  const drawnBy = (d) => draws.reduce((a,t) => a + (t.date <= d ? t.amount : 0), 0);
 
   const sched = [];
-  let bal = principal;
   // Day 0 fee record (kept separate, returned via .fee)
   const fee = principal * upfrontFee;
 
-  // payment periods
-  const totalPeriods = Math.ceil(tenor/freq);
+  // payment periods: full periods, then a shorter stub ending exactly at the tenor
+  const fullPeriods = Math.floor(tenor/freq);
+  const stubMonths = tenor - fullPeriods*freq;
+  const totalPeriods = fullPeriods + (stubMonths > 0 ? 1 : 0);
   const moratPeriods = Math.ceil(morat/freq);
   const amortPeriods = totalPeriods - moratPeriods;
 
+  let bal = tranched ? drawnBy(start) : principal;
+  let repaid = 0;
+  let prevDate = start;
   for(let p=1;p<=totalPeriods;p++){
-    const date = addMonths(start, p*freq);
-    const opening = bal;
-    let interest = bal * periodicRate;
-    let principalPay = 0;
-    if(p > moratPeriods){
-      if(repay==='Bullet'){
-        if(p===totalPeriods) principalPay = bal;
-      } else if(repay==='Amortizing'){
-        // equal principal
-        principalPay = principal / amortPeriods;
-        if(p===totalPeriods) principalPay = bal;
-      } else { // Partially Amortizing — 50% amortized over tenor, 50% bullet
-        const amortPart = (principal*0.5) / amortPeriods;
-        principalPay = amortPart;
-        if(p===totalPeriods) principalPay = bal;
+    const months = p <= fullPeriods ? freq : stubMonths;
+    const date = _schedAddMonths(start, p <= fullPeriods ? p*freq : tenor);
+    let interest = bal * annualRate * months/12;
+    if(tranched){
+      // draws strictly inside the period earn from their draw date; they are then outstanding for repayment
+      for(const t of draws){
+        if(t.date > prevDate && t.date < date){
+          interest += t.amount * annualRate * ((date - t.date)/_DAY_MS)/365;
+          bal += t.amount;
+        }
       }
     }
+    const opening = bal;
+    let principalPay = 0;
+    if(p === totalPeriods){
+      principalPay = bal; // always repay what is outstanding at maturity, whatever the moratorium
+    } else if(p > moratPeriods){
+      if(repay==='Amortizing'){
+        // equal principal
+        principalPay = principal / amortPeriods;
+      } else if(repay!=='Bullet'){ // Partially Amortizing — 50% amortized over tenor, 50% bullet
+        principalPay = (principal*0.5) / amortPeriods;
+      }
+      // rounded as the row shows it, so the balance repaid at maturity makes the rows add up to the principal
+      principalPay = Math.min(+principalPay.toFixed(4), bal);
+    }
     bal = Math.max(0, bal - principalPay);
+    repaid += principalPay;
     sched.push({
-      date: isoDate(date), period:p,
+      date: date.toISOString().slice(0,10), period:p,
       opening:+opening.toFixed(4), principal:+principalPay.toFixed(4),
       interest:+interest.toFixed(4),
       total:+(principalPay+interest).toFixed(4),
       closing:+bal.toFixed(4)
     });
+    prevDate = date;
+    // a draw dated on this period's end date starts earning from the next period
+    if(tranched) for(const t of draws){ if(+t.date === +date) bal += t.amount; }
   }
-  return {schedule:sched, fee, disbursement:principal, startDate:isoDate(start)};
+  return {schedule:sched, fee, disbursement:principal, startDate:start.toISOString().slice(0,10)};
 }
 
 function dealCashflowsForXIRR(deal){
@@ -1390,13 +1564,38 @@ function setLeadView(v){
 function stageClass(s){
   return 'badge stage-' + (s||'').split(' ')[0];
 }
+// Client decision Q3 (3 Nov 2026): the leads stored with the legacy status "Rejected" (no rejection stage) are shown as
+// their own group, "Rejected - unstaged", in the counts, on the board and in the Rejected section. No stage is assigned
+// and the stored value is not changed; the client stages them later through Edit or the status control.
+const UNSTAGED_REJECTED = 'Rejected';
+const UNSTAGED_REJECTED_LABEL = 'Rejected - unstaged';
+function stageLabel(s){ return s===UNSTAGED_REJECTED ? UNSTAGED_REJECTED_LABEL : s; }
+// PT-20: the Sector / Deal Type filters offer the fixed taxonomy plus every value actually stored on a record
+// (legacy values such as "Single Tranche", imported free text), so no lead is unreachable by filter. Stored data is never rewritten.
+function _syncFilterOptions(selId, values){
+  const sel = document.getElementById(selId); if(!sel) return;
+  const cur = sel.value;
+  const fixed = new Set(Array.from(sel.options).filter(o=>!o.dataset.dyn).map(o=>o.value));
+  const want = Array.from(new Set((values||[]).filter(v=>typeof v==='string' && v!=='' && !fixed.has(v)))).sort((a,b)=>a.localeCompare(b));
+  const have = Array.from(sel.options).filter(o=>o.dataset.dyn).map(o=>o.value);
+  if(have.length===want.length && have.every((v,i)=>v===want[i])) return;
+  Array.from(sel.options).filter(o=>o.dataset.dyn).forEach(o=>o.remove());
+  want.forEach(v=>{ const o = document.createElement('option'); o.value = v; o.textContent = v; o.dataset.dyn = '1'; sel.appendChild(o); });
+  if(cur) sel.value = cur;
+}
 function filterLeads(){
+  _syncFilterOptions('leadFilterSector', (state.leads||[]).map(l=>l.sector));
+  _syncFilterOptions('leadFilterDealType', (state.leads||[]).map(l=>l.dealType));
   const q = document.getElementById('leadSearch').value.toLowerCase();
   const fs = document.getElementById('leadFilterStage').value;
   const fsec = document.getElementById('leadFilterSector').value;
   const fdt = document.getElementById('leadFilterDealType').value;
   return state.leads.filter(l=>{
-    if(q && !((l.company||'').toLowerCase().includes(q) || (l.notes||'').toLowerCase().includes(q))) return false;
+    // Notes typed in the form are kept in notesLog; notes is the legacy single field (PT-16). Remarks are searched too
+    // (client decision Q6, 3 Nov 2026).
+    if(q && !((l.company||'').toLowerCase().includes(q) || (l.notes||'').toLowerCase().includes(q)
+      || String(l.remarks==null?'':l.remarks).toLowerCase().includes(q)
+      || (l.notesLog||[]).some(n=>(n && n.text || '').toLowerCase().includes(q)))) return false;
     if(fs && l.stage!==fs) return false;
     if(fsec && l.sector!==fsec) return false;
     if(fdt && l.dealType!==fdt) return false;
@@ -1405,6 +1604,9 @@ function filterLeads(){
 }
 function renderLeads(){
   const ls = filterLeads();
+  // The unstaged group appears once any lead is stored without a rejection stage, whatever the filters are.
+  const stages = ['Active','Passive','Rejected – Stage 1','Rejected – Stage 2','Rejected – Stage 3',
+    ...((state.leads||[]).some(l=>l.stage===UNSTAGED_REJECTED) ? [UNSTAGED_REJECTED] : []), 'Lost','Closed'];
   if(leadView==='table'){
     const tb = document.getElementById('leadsTbody');
     if(!ls.length){tb.innerHTML='<tr><td colspan="11" class="empty">No leads. Click "+ Add Lead" to get started.</td></tr>'}
@@ -1423,19 +1625,20 @@ function renderLeads(){
         <td>${refLine}</td>
         <td class="num">${fmt(l.size)}</td>
         <td>${esc(l.creditRating||'—')}</td>
-        <td><span class="${stageClass(l.stage)}" style="cursor:pointer" onclick="quickChangeStage('${esc(l.id)}')" title="Click to change status">${esc(l.stage)}</span>${lostLine}</td>
+        <td><span class="${stageClass(l.stage)}" style="cursor:pointer" onclick="quickChangeStage('${esc(l.id)}')" title="Click to change status">${esc(stageLabel(l.stage))}</span>${lostLine}</td>
         <td title="${esc(remarksTxt)}" style="max-width:240px;cursor:pointer" onclick="editRemarks('${esc(l.id)}')">${remarksShort}</td>
         <td class="actions">
           <button class="btn btn-ghost btn-sm" onclick="editLead('${esc(l.id)}')">Edit</button>
-         ${l.stage==='Closed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${esc(l.id)}')">→ Deal</button>`:''}
+         ${l.convertedDealId && state.deals.some(d=>d.id===l.convertedDealId)
+           ? `<button class="btn btn-ghost btn-sm" onclick="editDeal('${esc(l.convertedDealId)}')">View deal</button>`
+           : (l.stage==='Closed'?`<button class="btn btn-primary btn-sm" onclick="convertLead('${esc(l.id)}')">→ Deal</button>`:'')}
          <button class="btn btn-danger btn-sm" onclick="delLead('${esc(l.id)}')">×</button>
         </td>
       </tr>`}).join('');
   } else {
-    const stages = ['Active','Passive','Rejected – Stage 1','Rejected – Stage 2','Rejected – Stage 3','Lost','Closed'];
     document.getElementById('kanban').innerHTML = stages.map(s=>{
       const items = ls.filter(l=>l.stage===s);
-      return `<div class="kcol"><h4>${s} <span>${items.length}</span></h4>
+      return `<div class="kcol"><h4>${esc(stageLabel(s))} <span>${items.length}</span></h4>
         ${items.map(l=>`<div class="kcard" onclick="openLeadDetail('${esc(l.id)}')" style="cursor:pointer">
           <div class="name">${esc(l.company)}</div>
           <div class="meta"><span>₹${fmt(l.size)} Cr</span>${l.creditRating?`<span>${esc(l.creditRating)}</span>`:''}${l.stage==='Lost'&&l.lostTo?`<span style="color:var(--red-neg)">→ ${esc(l.lostTo)}</span>`:''}</div>
@@ -1444,11 +1647,15 @@ function renderLeads(){
     }).join('');
   }
   // summary
-  const stages = ['Active','Passive','Rejected – Stage 1','Rejected – Stage 2','Rejected – Stage 3','Lost','Closed'];
-  const total = ls.reduce((a,b)=>a+(+b.size||0),0);
+  // Client decision Q4 (3 Nov 2026): Total Pipeline counts Active and Passive leads only. Rejected, Lost and Closed are
+  // left out, and the Closed total is shown on its own.
+  const sumSize = (arr) => arr.reduce((a,b)=>a+(+b.size||0),0);
+  const total = sumSize(ls.filter(l=>l.stage==='Active' || l.stage==='Passive'));
+  const closedTotal = sumSize(ls.filter(l=>l.stage==='Closed'));
   document.getElementById('pipelineSummary').innerHTML =
-    stages.map(s=>`<div><span class="${stageClass(s)}">${s}</span> <b>${ls.filter(l=>l.stage===s).length}</b></div>`).join('') +
-    `<div style="margin-left:auto"><span style="color:var(--text-dim)">Total Pipeline:</span> <b>₹${fmt(total)} Cr</b></div>`;
+    stages.map(s=>`<div><span class="${stageClass(s)}">${esc(stageLabel(s))}</span> <b>${ls.filter(l=>l.stage===s).length}</b></div>`).join('') +
+    `<div style="margin-left:auto;display:flex;gap:18px"><div title="Active and Passive leads only"><span style="color:var(--text-dim)">Total Pipeline:</span> <b>₹${fmt(total)} Cr</b></div>` +
+    `<div title="Leads with status Closed, shown separately"><span style="color:var(--text-dim)">Closed total:</span> <b>₹${fmt(closedTotal)} Cr</b></div></div>`;
   renderQuarterlyReview();
   renderReevalBanner();
 }
@@ -1494,7 +1701,7 @@ function refreshCompetitorIntel(id){
   // append a timestamped note for audit
   l.notesLog = l.notesLog || [];
   l.notesLog.push({ts:new Date().toISOString(), text:`Quarterly review: market intel updated — ${l.lostTo||'(competitor unknown)'}${l.lostTerms?` | terms: ${l.lostTerms}`:''}`});
-  save(); renderLeads(); toast('Market intel updated');
+  touch(l); save(); renderLeads(); toast('Market intel updated');
 }
 function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
@@ -1620,10 +1827,13 @@ function _ensureLifecycleHistory(l){
 function renderLifecycleStepper(l){
   const isBlocked = l.stage==='Lost' || (l.stage||'').startsWith('Rejected');
   const curIdx = _lifecycleIndexFor(l);
-  const hist = _ensureLifecycleHistory(l);
-  const lastTs = hist.length ? new Date(hist[hist.length-1].ts) : null;
+  // Viewing a lead must not change it (PT-22): a lead with no history shows its initial stage without writing one.
+  const hist = Array.isArray(l.lifecycleHistory) && l.lifecycleHistory.length
+    ? l.lifecycleHistory
+    : [{ stage: LIFECYCLE_STAGES[curIdx].key, ts: l.createdAt || '', note:'Initial' }];
+  const lastTs = hist[hist.length-1].ts ? new Date(hist[hist.length-1].ts) : null;
   const lastTsStr = lastTs && !isNaN(lastTs) ? lastTs.toLocaleDateString() : '—';
-  const daysInStage = lastTs ? Math.max(0, Math.floor((Date.now()-lastTs.getTime())/86400000)) : 0;
+  const daysInStage = lastTs && !isNaN(lastTs) ? Math.max(0, Math.floor((Date.now()-lastTs.getTime())/86400000)) : 0;
 
   const steps = LIFECYCLE_STAGES.map((s,i)=>{
     let cls = '';
@@ -1666,6 +1876,21 @@ function renderLifecycleStepper(l){
     </div>` : ''}
   </div>`;
 }
+// PT-22: status and lifecycle stage are two views of one fact at the Closed/Disbursed boundary; keep them in step.
+// Closing via status moves an explicit lifecycle stage to Disbursed; moving the lifecycle back off Disbursed reopens a Closed status.
+function _lifecycleFollowStatus(l, note){
+  if(l.stage!=='Closed' || !l.lifecycleStage || l.lifecycleStage==='Disbursed') return;
+  _ensureLifecycleHistory(l);
+  l.lifecycleStage = 'Disbursed';
+  l.lifecycleHistory.push({ stage:'Disbursed', ts:new Date().toISOString(), note });
+}
+// Client decision Q7 (3 Nov 2026): a Closed lead taken back from Disbursed becomes Passive if it goes back to Sourced, and
+// Active if it goes back to any later stage. Changing the status by hand (status control, edit form) from Closed to
+// Active or Passive does not move the lifecycle stage; only the lifecycle controls call this.
+function _statusFollowLifecycle(l, newKey){
+  if(newKey==='Disbursed') l.stage = 'Closed';
+  else if(l.stage==='Closed') l.stage = newKey==='Sourced' ? 'Passive' : 'Active';
+}
 function advanceLifecycle(id, dir){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
   _ensureLifecycleHistory(l);
@@ -1677,8 +1902,8 @@ function advanceLifecycle(id, dir){
   if(note===null) return;
   l.lifecycleStage = newKey;
   l.lifecycleHistory.push({ stage:newKey, ts:new Date().toISOString(), note:(note||'').trim() });
-  if(newKey==='Disbursed') l.stage = 'Closed';
-  save(); document.getElementById('leadDetailBody').innerHTML = _renderLeadDetailBody(l); renderLeads(); toast('Lifecycle updated');
+  _statusFollowLifecycle(l, newKey);
+  touch(l); save(); document.getElementById('leadDetailBody').innerHTML = _renderLeadDetailBody(l); renderLeads(); toast('Lifecycle updated');
 }
 function setLifecycleStage(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
@@ -1693,8 +1918,8 @@ function setLifecycleStage(id){
   _ensureLifecycleHistory(l);
   l.lifecycleStage = newKey;
   l.lifecycleHistory.push({ stage:newKey, ts:new Date().toISOString(), note:note.trim() });
-  if(newKey==='Disbursed') l.stage='Closed';
-  save(); document.getElementById('leadDetailBody').innerHTML = _renderLeadDetailBody(l); renderLeads(); toast('Lifecycle stage set');
+  _statusFollowLifecycle(l, newKey);
+  touch(l); save(); document.getElementById('leadDetailBody').innerHTML = _renderLeadDetailBody(l); renderLeads(); toast('Lifecycle stage set');
 }
 
 const _rationaleSummaryCache = {};
@@ -1838,7 +2063,18 @@ async function summarizePreDDNow(id){
   }catch(err){ console.error(err); if(out) out.textContent='⚠️ Error: '+err.message; }
 }
 
+// A stored stage the form does not list (the legacy plain "Rejected") is offered as it is, so the lead can be
+// saved without being re-staged (PT-15). Mapping legacy stages onto current ones is a business decision (BR-3).
+function _setStageOptions(sel, stored){
+  sel.querySelectorAll('option[data-legacy]').forEach(o=>o.remove());
+  if(stored && ![...sel.options].some(o=>o.value===stored)){
+    const o = document.createElement('option');
+    o.value = stored; o.textContent = stored; o.dataset.legacy = '1';
+    sel.appendChild(o);
+  }
+}
 function openLeadModal(){
+  _setStageOptions(document.getElementById('leadForm').elements.stage, '');
   document.getElementById('leadForm').reset();
   document.getElementById('leadForm').id.value = '';
   document.getElementById('sectorOtherRow').style.display='none';
@@ -1864,6 +2100,7 @@ function editLead(id){
   const dtOpts = ['Opco Deal','Promoter Financing','Acquisition Funding','Captable Consolidation','Others'];
   const sectorVal = sectorOpts.includes(l.sector) ? l.sector : 'Other';
   const dtVal = dtOpts.includes(l.dealType) ? l.dealType : 'Others';
+  _setStageOptions(f.elements.stage, l.stage);
   for(const k of Object.keys(l)){ if(f.elements[k] && k!=='notes') f.elements[k].value = l[k]??'' }
   f.elements.sector.value = sectorVal;
   f.elements.dealType.value = dtVal;
@@ -1887,9 +2124,9 @@ function editLead(id){
       preHint.innerHTML = d ? `📎 Current: <b>${esc(d.name)}</b> — upload to replace` : 'Previously uploaded file no longer available — upload to replace';
     } else preHint.textContent='No Pre-DD note uploaded yet';
   }
-  if(sectorVal==='Other'){ document.getElementById('sectorOtherRow').style.display=''; document.getElementById('sectorOther').value = l.sector==='Other'?'':l.sector; }
+  if(sectorVal==='Other'){ document.getElementById('sectorOtherRow').style.display=''; document.getElementById('sectorOther').value = l.sector==='Other'?'':(l.sector??''); }
   else document.getElementById('sectorOtherRow').style.display='none';
-  if(dtVal==='Others'){ document.getElementById('dealTypeOtherRow').style.display=''; document.getElementById('dealTypeOther').value = l.dealType==='Others'?'':l.dealType; }
+  if(dtVal==='Others'){ document.getElementById('dealTypeOtherRow').style.display=''; document.getElementById('dealTypeOther').value = l.dealType==='Others'?'':(l.dealType??''); }
   else document.getElementById('dealTypeOtherRow').style.display='none';
   toggleLostFields(l.stage||'');
   document.querySelector('#leadModal h2 span').textContent = 'Edit Lead';
@@ -1958,7 +2195,9 @@ async function saveLead(e){
   // Stamp rejection metadata when stage transitions into / out of Rejected
   const wasRejected = prev && (prev.stage||'').startsWith('Rejected');
   if(isRejected){
-    if(!obj.rejectedAt || (prev && prev.stage !== obj.stage)) obj.rejectedAt = new Date().toISOString();
+    // The form has no rejectedAt field, so the old test (!obj.rejectedAt) re-dated every save. Only a stage change
+    // dates the rejection; saving with the stage unchanged keeps the stored date, or none (PT-13).
+    if(stageChanged) obj.rejectedAt = new Date().toISOString();
     if(prev && prev.stage !== obj.stage){
       obj.notesLog.push({ts:obj.rejectedAt, text:`Stage set to ${obj.stage}${obj.remarks?` — ${obj.remarks}`:''}`});
     }
@@ -1966,9 +2205,11 @@ async function saveLead(e){
     obj.notesLog.push({ts:new Date().toISOString(), text:`Moved out of Rejected → ${obj.stage}`});
   }
   obj.updatedAt = new Date().toISOString();
+  if(!prev) obj.createdAt = obj.updatedAt;
   const idx = state.leads.findIndex(x=>x.id===obj.id);
   if(idx<0) state.leads.push(obj);
   else state.leads[idx] = {...state.leads[idx], ...obj};
+  if(stageChanged) _lifecycleFollowStatus(state.leads.find(x=>x.id===obj.id), 'Status set to Closed');
   save(); closeModal('leadModal'); renderLeads();
   try{ renderRejected(); renderReevalBanner(); }catch(_){ }
   toast('Lead saved');
@@ -1991,9 +2232,12 @@ async function _extractTextFromFile(file){
     const buf = await file.arrayBuffer();
     const r = await mammoth.extractRawText({arrayBuffer:buf});
     return r.value || '';
-  } else {
+  } else if(name.endsWith('.txt')){
     return await file.text();
   }
+  // Anything else (a legacy .doc in particular) has no reader here; reading it as text sent binary noise to the
+  // AI extractor, which then filled in a rating (PT-23).
+  return '';
 }
 
 async function autoExtractRating(inputEl){
@@ -2040,15 +2284,21 @@ function editRemarks(id){
   if(r===null) return;
   l.remarks = r.trim(); l.updatedAt = new Date().toISOString(); save(); renderLeads(); toast('Remarks updated');
 }
+// The one status change from the badge. A wrapper at the end of the file used to replace this function and
+// skipped the Passive and Lost prompts below (PT-17); its numbered prompt is kept here.
 function quickChangeStage(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
   const stages = ['Active','Passive','Rejected – Stage 1','Rejected – Stage 2','Rejected – Stage 3','Lost','Closed'];
-  const ns = window.prompt(`Change status for ${l.company}.\nOptions:\n  ${stages.join('\n  ')}\nCurrent: ${l.stage}`, l.stage);
-  if(!ns || !stages.includes(ns)) return;
+  const opts = stages.map((s,i)=>`${i+1}. ${s}`).join('\n');
+  const ans = window.prompt(`Change status for ${l.company}:\n${opts}\n\nEnter number:`, String(stages.indexOf(l.stage)+1 || 1));
+  if(!ans) return;
+  const n = parseInt(ans,10); if(isNaN(n)||n<1||n>stages.length) return;
+  const ns = stages[n-1];
   if(ns === l.stage) return;
   if(ns.startsWith('Rejected')){ openRejectModal(id, ns); return; }
   const wasRej = (l.stage||'').startsWith('Rejected');
   l.stage = ns;
+  _lifecycleFollowStatus(l, 'Status set to Closed');
   l.notesLog = l.notesLog || [];
   if(ns==='Passive' || ns==='Lost'){
     const r = window.prompt(`Marked as "${ns}". Add a remark for future recall:`, l.remarks||'');
@@ -2061,7 +2311,7 @@ function quickChangeStage(id){
     if(kt!==null) l.lostTerms = kt.trim();
   }
   if(wasRej) l.notesLog.push({ts:new Date().toISOString(), text:`Moved out of Rejected → ${ns}`});
-  l.updatedAt = new Date().toISOString();
+  touch(l);
   save(); renderLeads();
   try{ renderRejected(); renderReevalBanner(); }catch(_){ }
   toast('Status updated');
@@ -2123,21 +2373,31 @@ function saveDeal(e){
   if(obj.dealType==='Other' && (obj.dealTypeOther||'').trim()) obj.dealType = obj.dealTypeOther.trim();
   delete obj.sectorOther; delete obj.dealTypeOther;
   obj.tranches = collectTranches();
+  const ruleErrs = _dealRuleErrors(obj);
+  if(ruleErrs.length){ alert('Deal not saved.\n\n' + ruleErrs.join('\n')); return; }
   obj.updatedAt = new Date().toISOString();
+  // Build the schedule before changing state, so a deal that cannot be scheduled is not stored half-made.
+  let g;
+  try{ g = generateSchedule(obj); }
+  catch(err){ console.warn('[deal] schedule', err); toast('Deal not saved: check the start date and tranche dates.'); return; }
   if(!obj.id){ obj.id = uid(); state.deals.push(obj); } else {
     const i = state.deals.findIndex(x=>x.id===obj.id); if(i>=0) state.deals[i] = {...state.deals[i], ...obj};
   }
-  // generate cashflows
-  const g = generateSchedule(obj);
   state.cashflows[obj.id] = g.schedule;
-  // mark lead converted
+  // A converted lead stays in the pipeline, linked to its deal: the Portfolio view is hidden, so deleting the
+  // lead made the company disappear from the app (PT-06).
   const fromLead = e.target.dataset.fromLead;
-  if(fromLead){
-    state.leads = state.leads.filter(l=>l.id!==fromLead);
-    state.deletedLeadIds = state.deletedLeadIds || [];
-    state.deletedLeadIds.push({ id: fromLead, deletedAt: new Date().toISOString() });
+  const lead = fromLead && state.leads.find(l=>l.id===fromLead);
+  if(lead){
+    lead.convertedDealId = obj.id;
+    lead.convertedAt = obj.updatedAt;
+    lead.notesLog = lead.notesLog || [];
+    lead.notesLog.push({ ts: obj.updatedAt, text: `Converted to deal (${obj.company||lead.company||''})` });
+    touch(lead);
   }
-  save(); closeModal('dealModal'); renderPortfolio(); renderLeads(); toast('Deal saved');
+  save(); closeModal('dealModal');
+  try{ renderPortfolio(); }catch(err){ console.warn('[portfolio] render', err); }
+  renderLeads(); toast('Deal saved');
 }
 function editDeal(id){
   const d = state.deals.find(x=>x.id===id); if(!d) return;
@@ -2468,23 +2728,99 @@ function buildModelDeal(){
     moratorium: mode==='amort'?get('m_morat'):0,
     amortFreq: get('m_freq'),
     upfrontFee: get('m_fee'), repayType: get('m_repay'),
-    startDate: mode==='amort'? get('m_start') : (document.querySelector('#m_tranches input')?.value || new Date().toISOString().slice(0,10)),
+    startDate: mode==='amort'? get('m_start') : '',
   };
   if(mode==='amort'){
     deal.size = (+get('m_amt'))/1e7; // store in Cr
   } else {
+    // Sorted by date, so the schedule starts at the earliest tranche whatever order the rows were typed in (PT-02).
     const tr = [...document.querySelectorAll('#m_tranches .tranche-row')].map(r=>{
       const ins=r.querySelectorAll('input');
       return {date:ins[0].value, amount:(+ins[1].value)/1e7};
-    }).filter(t=>t.date && t.amount);
+    }).filter(t=>t.date && t.amount).sort((a,b)=>a.date.localeCompare(b.date));
     deal.tranches = tr;
     deal.size = tr.reduce((a,t)=>a+t.amount,0);
+    deal.startDate = tr.length ? tr[0].date : '';
   }
   return deal;
 }
 
+// Field-level checks before a model is run (PT-21). Returns a list of messages; empty when the inputs can be modelled.
+function validateModelDeal(m){
+  const errs = [];
+  if(m.custom){
+    if(m.flows.length < 2) errs.push('Enter at least two dated cash flows.');
+    return errs;
+  }
+  const isDate = (s) => { try{ _schedYMD(s); return !!s; }catch(_){ return false; } };
+  const tenor = +m.tenor, morat = +(m.moratorium||0), rate = +m.coupon, fee = +(m.upfrontFee||0);
+  if(!(isFinite(tenor) && tenor > 0 && Number.isInteger(tenor))) errs.push('Tenor must be a whole number of months greater than 0.');
+  if(!(isFinite(rate) && rate >= 0 && String(m.coupon).trim() !== '')) errs.push('Coupon rate must be 0% or more.');
+  if(!(isFinite(fee) && fee >= 0 && fee < 100)) errs.push('Upfront fee must be between 0% and 100%.');
+  if(mode === 'tranche'){
+    if(!(m.tranches||[]).length) errs.push('Add at least one tranche with a date and an amount greater than 0.');
+    else if((m.tranches||[]).some(t => !isDate(t.date))) errs.push('Every tranche needs a valid date.');
+    else if(isFinite(tenor) && tenor > 0){
+      const maturity = _schedAddMonths(_schedYMD(m.tranches[0].date), tenor);
+      if(m.tranches.some(t => _schedYMD(t.date) >= maturity)) errs.push('Every tranche must be drawn before maturity (first tranche + tenor).');
+    }
+  } else {
+    if(!isDate(m.startDate)) errs.push('Start date is required.');
+    if(!(isFinite(+m.size) && +m.size > 0)) errs.push('Investment amount must be greater than 0.');
+    if(!(isFinite(morat) && morat >= 0 && Number.isInteger(morat))) errs.push('Moratorium must be a whole number of months, 0 or more.');
+  }
+  errs.push(..._dealRuleErrors(m));
+  return errs;
+}
+// Client decisions Q20 and Q16 (3 Nov 2026), checked on every path that writes a deal: the deal form, the Modeler and import.
+//  Q20: the drawn amount (the tranches added up) may be less than the sanctioned amount, never more.
+//  Q16: a moratorium cannot be as long as the loan or longer. Only the explicit part is enforced: for an Amortizing loan.
+//       Bullet and Partially Amortizing loans are unchanged because the client has not said how they should behave.
+// Existing stored deals are not re-checked when they are displayed or recalculated; only a save, a model run or an import is.
+function _dealRuleErrors(deal){
+  const errs = [];
+  const tr = (Array.isArray(deal.tranches) ? deal.tranches : []).filter(t=>t && isFinite(+t.amount) && +t.amount > 0);
+  const sz = deal.size;
+  if(tr.length && sz!=null && sz!=='' && isFinite(+sz)){
+    const drawn = Math.round(tr.reduce((a,t)=>a+(+t.amount),0)*1e6)/1e6;
+    const sanctioned = Math.round((+sz)*1e6)/1e6;
+    if(drawn > sanctioned) errs.push(`The tranches add up to ₹${fmt(drawn)} Cr, which is more than the sanctioned amount of ₹${fmt(sanctioned)} Cr. The drawn amount can be less than the sanctioned amount, but never more.`);
+  }
+  if(deal.repayType==='Amortizing'){
+    const tenor = +deal.tenor, morat = +(deal.moratorium||0);
+    if(isFinite(tenor) && tenor > 0 && isFinite(morat) && morat >= tenor)
+      errs.push(`The moratorium (${morat} months) is as long as the loan (${tenor} months) or longer, which is not allowed for an Amortizing loan.`);
+  }
+  return errs;
+}
+function _showModelMessage(kind, lines){
+  let box = document.getElementById('modelMsg');
+  if(!box){
+    box = document.createElement('div');
+    box.id = 'modelMsg';
+    document.getElementById('xirrDisplay').insertAdjacentElement('beforebegin', box);
+  }
+  box.style.cssText = lines.length ? `margin:0 0 10px;padding:8px 10px;border-radius:6px;font-size:13px;${kind==='error'?'background:rgba(239,68,68,.12);color:#fca5a5':'background:rgba(250,204,21,.10);color:#fde68a'}` : 'display:none';
+  box.innerHTML = lines.map(l=>`<div>${esc(l)}</div>`).join('');
+}
+
 function runModel(){
   const m = buildModelDeal();
+  const errs = validateModelDeal(m);
+  if(errs.length){
+    modelResult = null;
+    _showModelMessage('error', errs);
+    const xd = document.getElementById('xirrDisplay'); xd.className = 'xirr-big'; xd.textContent = '—';
+    const rcEl = document.getElementById('rateCompare'); if(rcEl) rcEl.textContent = '';
+    document.getElementById('scenarioPanel').innerHTML = '';
+    document.querySelector('#modelCFTable tbody').innerHTML = '';
+    return;
+  }
+  const notes = [];
+  if(!m.custom && mode === 'amort' && +(m.moratorium||0) >= +m.tenor){
+    notes.push(`The moratorium (${+m.moratorium} months) covers the whole tenor, so all principal is repaid at maturity.`);
+  }
+  _showModelMessage('note', notes);
   let flows, schedule;
   if(m.custom){
     flows = m.flows;
@@ -2503,6 +2839,13 @@ function displayModelResult(){
   const cls = !isFinite(r)?'':r<0.10?'xirr-low':r<0.14?'xirr-mid':'xirr-high';
   document.getElementById('xirrDisplay').className = 'xirr-big '+cls;
   document.getElementById('xirrDisplay').textContent = pct(r);
+  // Client request Q18 (3 Nov 2026): the stated rate (per annum), the payment frequency chosen for the deal and the
+  // effective return side by side. The effective return is the XIRR the Modeler already computes from the schedule.
+  let rc = document.getElementById('rateCompare');
+  if(!rc){ rc = document.createElement('div'); rc.id = 'rateCompare'; rc.style.cssText = 'margin:2px 0 10px;font-size:13px;color:var(--text-dim)';
+    document.getElementById('xirrDisplay').insertAdjacentElement('afterend', rc); }
+  const md = modelResult.deal;
+  rc.textContent = md.custom ? '' : `Stated rate ${pct2(+md.coupon)} p.a., paid ${md.amortFreq||'Quarterly'} · Effective return (XIRR) ${pct(r)}`;
 
   // sensitivity
   if(!modelResult.deal.custom){
@@ -2522,12 +2865,15 @@ function displayModelResult(){
   if(modelResult.deal.custom){
     tb.innerHTML = modelResult.flows.map(f=>{cum+=f.amount;return `<tr><td>${f.date.toISOString().slice(0,10)}</td><td class="num">—</td><td class="num">—</td><td class="num ${f.amount>=0?'pos':'neg'}">${fmt(f.amount)}</td><td class="num">${fmt(cum)}</td></tr>`}).join('');
   } else {
-    // Day 0 outflow
-    const disb = -(+modelResult.deal.size)*(1-(+modelResult.deal.upfrontFee||0)/100);
-    cum = disb;
-    let html = `<tr><td>${modelResult.deal.startDate}</td><td class="num">—</td><td class="num">—</td><td class="num neg">${fmt(disb)} Cr</td><td class="num">${fmt(cum)}</td></tr>`;
-    modelResult.schedule.forEach(r=>{cum+=r.total;html+=`<tr><td>${r.date}</td><td class="num">${fmt(r.principal)}</td><td class="num">${fmt(r.interest)}</td><td class="num pos">${fmt(r.total)}</td><td class="num">${fmt(cum)}</td></tr>`});
-    tb.innerHTML = html;
+    // Outflows on their own dates: one for the investment, or one per tranche (PT-02), then the schedule
+    const rows = modelResult.flows.filter(f=>f.amount<0).map(f=>({date:f.date.toISOString().slice(0,10), out:f.amount}))
+      .concat(modelResult.schedule.map(r=>({date:r.date, r})))
+      .sort((a,b)=>a.date.localeCompare(b.date) || (a.out!==undefined ? -1 : 1));
+    tb.innerHTML = rows.map(x=>{
+      if(x.out!==undefined){ cum+=x.out; return `<tr><td>${x.date}</td><td class="num">—</td><td class="num">—</td><td class="num neg">${fmt(x.out)} Cr</td><td class="num">${fmt(cum)}</td></tr>`; }
+      const r = x.r; cum+=r.total;
+      return `<tr><td>${r.date}</td><td class="num">${fmt(r.principal)}</td><td class="num">${fmt(r.interest)}</td><td class="num pos">${fmt(r.total)}</td><td class="num">${fmt(cum)}</td></tr>`;
+    }).join('');
   }
 
   // charts
@@ -2649,72 +2995,224 @@ function exportLeadsCSV(){
     return l[c]||'';
   }))],'leads.csv');
 }
-function exportXLSX(){
+/* Excel backup (client decision Q10, 3 Nov 2026: the export is a backup, for use if the hosted app has problems).
+ * Every stored field of every lead and deal gets a column, so nothing is left out because it was not on a fixed list.
+ * Numbers, 0 and false are written as themselves (they used to become blank). Lists and objects (notes history, lifecycle
+ * history, co-investors, tranches, market news) are written as text that starts with "json:" and are read back as the same
+ * structure. A value too long for one Excel cell continues in the columns "<field>~2", "<field>~3" and so on.
+ * The workbook does not hold the uploaded documents, the fund settings, the distributions or the deletion records
+ * (see the "About this file" sheet). Importing re-stamps updatedAt on every record, on purpose (PT-10).
+ * Treat it as complete only as far as the round-trip test shows. */
+const BK_PREFIX = 'json:';
+const BK_CHUNK = 30000;
+const BK_LEAD_FIRST = ['id','company','sector','dealType','size','primaryPerson','secondaryPerson','referredBy','referredContact','creditRating','stage','lostTo','lostTerms','remarks','notes'];
+const BK_DEAL_FIRST = ['id','company','sector','dealType','size','invested','coupon','tenor','startDate','repayType','amortFreq','moratorium','upfrontFee','status','rating','security','xirrOverride','covenants'];
+function _bkEncode(v){
+  if(v === undefined) return undefined;
+  if(typeof v === 'number' || typeof v === 'boolean') return v;
+  if(typeof v === 'string') return v.startsWith(BK_PREFIX) ? BK_PREFIX + JSON.stringify(v) : v;
+  return BK_PREFIX + JSON.stringify(v);
+}
+function _bkColumns(recs, first){
+  const seen = new Set(first), cols = first.slice();
+  recs.forEach(r=>Object.keys(r||{}).forEach(k=>{ if(!seen.has(k)){ seen.add(k); cols.push(k); } }));
+  return cols;
+}
+function _bkRow(rec, cols){
+  const o = {};
+  for(const k of cols){
+    const enc = _bkEncode(rec[k]);
+    if(enc === undefined) continue;
+    if(typeof enc === 'string' && enc.length > BK_CHUNK){
+      for(let i=0, n=1; i<enc.length; i+=BK_CHUNK, n++) o[n===1 ? k : `${k}~${n}`] = enc.slice(i, i+BK_CHUNK);
+    } else o[k] = enc;
+  }
+  return o;
+}
+// Reads one sheet row back into a record. Cells that start with "json:" are decoded; a cell that starts with it but is not
+// valid JSON can only have been typed by hand, so it is kept as the text it is.
+function _bkDecodeRow(r){
+  const parts = {};
+  for(const k of Object.keys(r)){
+    const m = /^(.+)~(\d+)$/.exec(k);
+    if(m) (parts[m[1]] = parts[m[1]] || {})[+m[2]] = r[k];
+  }
+  const out = {};
+  for(const k of Object.keys(r)){
+    if(/^(.+)~(\d+)$/.test(k) || k === 'notesReadable') continue;
+    let v = r[k];
+    if(parts[k]) v = String(v) + Object.keys(parts[k]).map(Number).sort((a,b)=>a-b).map(i=>String(parts[k][i])).join('');
+    if(typeof v === 'string' && v.startsWith(BK_PREFIX)){ try{ v = JSON.parse(v.slice(BK_PREFIX.length)); }catch(_){ /* hand-typed text */ } }
+    out[k] = v;
+  }
+  if(typeof r.__rowNum__ === 'number') Object.defineProperty(out, '__rowNum__', {value: r.__rowNum__, enumerable: false});
+  return out;
+}
+function _buildBackupWorkbook(){
   const wb = XLSX.utils.book_new();
-  // leads
-  const leadCols=['id','company','sector','dealType','size','primaryPerson','secondaryPerson','referredBy','referredContact','creditRating','stage','lostTo','lostTerms','remarks','notes'];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.leads.map(l=>{const o={};leadCols.forEach(c=>{
-    if(c==='notes') o[c] = (l.notesLog||[]).map(n=>`[${n.ts}] ${n.text}`).join(' | ') || (l.notes||'');
-    else o[c]=l[c]||'';
-  });return o})), 'Leads');
-  // deals
-  const dealCols=['id','company','sector','dealType','size','invested','coupon','tenor','startDate','repayType','amortFreq','moratorium','upfrontFee','status','rating','security','xirrOverride','covenants'];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.deals.map(d=>{const o={};dealCols.forEach(c=>o[c]=d[c]||'');return o})), 'Deals');
-  // cash flows long
+  const leadCols = _bkColumns(state.leads, BK_LEAD_FIRST);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.leads.map(l=>({
+    ..._bkRow(l, leadCols),
+    // For reading in Excel only; ignored on import (the notes themselves are in notesLog).
+    notesReadable: (t => t.length > BK_CHUNK ? t.slice(0, BK_CHUNK) + ' … (cut here; the full history is in notesLog)' : t)(
+      (l.notesLog||[]).map(n=>`[${n && n.ts}] ${n && n.text}`).join(' | '))
+  }))), 'Leads');
+  const dealCols = _bkColumns(state.deals, BK_DEAL_FIRST);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.deals.map(d=>_bkRow(d, dealCols))), 'Deals');
   const cf = [];
-  state.deals.forEach(d=>(state.cashflows[d.id]||[]).forEach(r=>cf.push({dealId:d.id,deal:d.company,...r,total:r.principal+r.interest})));
+  state.deals.forEach(d=>(state.cashflows[d.id]||[]).forEach(r=>cf.push({dealId:d.id, deal:d.company, ...r,
+    total: (r.total !== undefined && r.total !== '' && r.total !== null) ? r.total : r.principal + r.interest})));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cf), 'CashFlows');
-  XLSX.writeFile(wb, `SpECS_Fund_${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ['Pipeline Tracker backup'],
+    ['Exported', new Date().toISOString()],
+    ['Format', 'Every stored field of each lead and deal has a column. Lists and objects are text starting with "json:". A long value continues in "<field>~2", "<field>~3".'],
+    ['Included', 'Leads, Deals and their cash flows.'],
+    ['Not included', 'Uploaded documents (files), fund settings, distributions, and the record of deleted leads.'],
+    ['On import', 'Each record is saved as an edit, so its updatedAt becomes the time of the import. Everything else is restored as exported.'],
+    ['notesReadable', 'A plain-text copy of the notes history, for reading in Excel. It is ignored on import; the notes themselves are in notesLog.']
+  ]), 'About this file');
+  return wb;
+}
+function exportXLSX(){
+  try{
+    const wb = _buildBackupWorkbook();
+    XLSX.writeFile(wb, `SpECS_Fund_${new Date().toISOString().slice(0,10)}.xlsx`);
+  }catch(err){
+    alert('Excel export failed. Nothing was saved.\n\n' + err.message);
+    return;
+  }
   toast('Excel exported');
+}
+// A date cell arrives as an Excel serial number, or as text if the workbook stores it that way (an exported file
+// does). Both become a plain YYYY-MM-DD calendar date; anything else is refused (PT-08).
+function _importDate(v){
+  if(typeof v === 'number' && isFinite(v)){
+    const p = XLSX.SSF.parse_date_code(v);
+    return p && p.y >= 1900 ? `${p.y}-${String(p.m).padStart(2,'0')}-${String(p.d).padStart(2,'0')}` : null;
+  }
+  if(typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v.trim())){
+    try{ _schedYMD(v.trim()); return v.trim(); }catch(_){ return null; }
+  }
+  return null;
+}
+function _importRowNum(r, i){ return (typeof r.__rowNum__ === 'number' ? r.__rowNum__ : i + 1) + 1; }
+// Reads and checks every sheet without touching state. The import is applied only if nothing failed (PT-07).
+function _planImport(wb){
+  const plan = { leads:[], deals:[], cashflows:{}, errors:[] };
+  if(wb.Sheets['Leads']){
+    XLSX.utils.sheet_to_json(wb.Sheets['Leads']).forEach(r=>{ if(r.company) plan.leads.push(_bkDecodeRow(r)); });
+  }
+  if(wb.Sheets['Deals']){
+    XLSX.utils.sheet_to_json(wb.Sheets['Deals']).forEach((r, i)=>{
+      if(!r.company) return;
+      const where = `Deals row ${_importRowNum(r, i)} (${r.company})`;
+      const startDate = _importDate(r.startDate);
+      if(!startDate){ plan.errors.push(`${where}: start date "${r.startDate ?? ''}" is not a date.`); return; }
+      const row = {..._bkDecodeRow(r), startDate};
+      const existing = row.id && state.deals.find(d=>d.id===row.id);
+      const ruleErrs = _dealRuleErrors({...(existing||{}), ...row});
+      if(ruleErrs.length){ plan.errors.push(`${where}: ${ruleErrs.join(' ')}`); return; }
+      let schedule;
+      try{ schedule = generateSchedule({...(existing||{}), ...row}).schedule; }catch(_){ schedule = null; }
+      if(!schedule || !schedule.length || schedule.some(p=>!isFinite(p.total) || !isFinite(p.closing))){
+        plan.errors.push(`${where}: no schedule can be built (check size, coupon and tenor).`);
+        return;
+      }
+      plan.deals.push({ row, schedule });
+    });
+  }
+  if(wb.Sheets['CashFlows']){
+    XLSX.utils.sheet_to_json(wb.Sheets['CashFlows']).forEach((r, i)=>{
+      if(!r.dealId) return;
+      const date = _importDate(r.date);
+      if(!date){ plan.errors.push(`CashFlows row ${_importRowNum(r, i)}: date "${r.date ?? ''}" is not a date.`); return; }
+      (plan.cashflows[r.dealId] = plan.cashflows[r.dealId]||[]).push({
+        date, period:+r.period, opening:+r.opening, principal:+r.principal,
+        interest:+r.interest, total:+(r.total||r.principal+r.interest), closing:+r.closing
+      });
+    });
+  }
+  return plan;
+}
+// Client decision Q11 (3 Nov 2026): a lead row with no ID is never matched to an existing lead silently. When its company
+// name looks like an existing lead, the user is asked each time: update that lead, or create a new one. The client has not
+// said what "looks like" means; the only rule used here is the same name ignoring case and spacing. A row that matches
+// nothing is created as a new lead, as before. Returns Map(plan.leads index -> existing lead id), or null if the user cancels.
+function _normCompany(s){ return String(s==null ? '' : s).toLowerCase().replace(/\s+/g,' ').trim(); }
+function _askImportMatches(plan){
+  const decisions = new Map();
+  for(let i = 0; i < plan.leads.length; i++){
+    const r = plan.leads[i];
+    if(r.id) continue;
+    const key = _normCompany(r.company);
+    const matches = state.leads.filter(l => _normCompany(l.company) === key);
+    if(!matches.length) continue;
+    const list = matches.map((m,j)=>`  ${j+1}. ${m.company} — ${stageLabel(m.stage)}, ₹${fmt(m.size||0)} Cr, ${m.sector||'no sector'}`).join('\n');
+    let answered = false;
+    for(let attempt = 0; attempt < 3 && !answered; attempt++){
+      const ans = window.prompt(
+        `Leads row ${_importRowNum(r, i)} ("${r.company}") has no ID, and the company name matches ${matches.length===1?'an existing lead':'existing leads'}:\n${list}\n\n` +
+        `Type ${matches.length===1?'1':'the number'} to UPDATE that lead from this row, or N to create a NEW lead.\nCancel stops the whole import; nothing is changed.`, 'N');
+      if(ans === null) return null;
+      const t = ans.trim().toLowerCase();
+      if(t === 'n' || t === 'new'){ answered = true; }
+      else {
+        const n = /^\d+$/.test(t) ? parseInt(t, 10) : 0;
+        if(n >= 1 && n <= matches.length){ decisions.set(i, matches[n-1].id); answered = true; }
+      }
+    }
+    if(!answered) return null;
+  }
+  return decisions;
+}
+function _applyImport(plan, decisions){
+  const deleted = new Set((state.deletedLeadIds||[]).map(t=>t.id));
+  let restored = 0;
+  plan.updatedByName = 0;
+  // Imported records are stamped like any other edit, so they reach other browsers, and a lead restored from a
+  // workbook outranks its earlier deletion instead of being deleted again at the next sync (PT-10).
+  plan.leads.forEach((r, i)=>{
+    const matchedId = !r.id && decisions && decisions.get(i);
+    const existing = (r.id || matchedId) && state.leads.find(l=>l.id===(r.id || matchedId));
+    if(existing){
+      if(matchedId){ const {id:_ignored, ...rest} = r; Object.assign(existing, rest); plan.updatedByName++; }
+      else Object.assign(existing, r);
+      touch(existing);
+    }
+    else { if(r.id && deleted.has(r.id)) restored++; state.leads.push(touch({...r, id:r.id||uid()})); }
+  });
+  plan.deals.forEach(({ row, schedule })=>{
+    const existing = row.id && state.deals.find(d=>d.id===row.id);
+    let id;
+    if(existing){ Object.assign(existing, row); touch(existing); id = existing.id; }
+    else { id = row.id || uid(); state.deals.push(touch({...row, id})); }
+    state.cashflows[id] = schedule;
+  });
+  Object.assign(state.cashflows, plan.cashflows);
+  return restored;
 }
 function importXLSX(e){
   const file = e.target.files[0]; if(!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
-    try{
-      const wb = XLSX.read(ev.target.result, {type:'array'});
-      let imported = 0;
-      if(wb.Sheets['Leads']){
-        const rows = XLSX.utils.sheet_to_json(wb.Sheets['Leads']);
-        rows.forEach(r=>{
-          if(!r.company) return;
-          const existing = r.id && state.leads.find(l=>l.id===r.id);
-          if(existing) Object.assign(existing, r);
-          else state.leads.push({...r, id:r.id||uid()});
-          imported++;
-        });
-      }
-      if(wb.Sheets['Deals']){
-        const rows = XLSX.utils.sheet_to_json(wb.Sheets['Deals']);
-        rows.forEach(r=>{
-          if(!r.company) return;
-          // normalize date
-          if(r.startDate instanceof Date) r.startDate = r.startDate.toISOString().slice(0,10);
-          const existing = r.id && state.deals.find(d=>d.id===r.id);
-          if(existing) Object.assign(existing, r);
-          else { r.id = r.id||uid(); state.deals.push(r); }
-          state.cashflows[r.id] = generateSchedule(r).schedule;
-          imported++;
-        });
-      }
-      if(wb.Sheets['CashFlows']){
-        const rows = XLSX.utils.sheet_to_json(wb.Sheets['CashFlows']);
-        const grouped = {};
-        rows.forEach(r=>{
-          if(!r.dealId) return;
-          if(r.date instanceof Date) r.date = r.date.toISOString().slice(0,10);
-          (grouped[r.dealId] = grouped[r.dealId]||[]).push({
-            date:r.date, period:+r.period, opening:+r.opening, principal:+r.principal,
-            interest:+r.interest, total:+(r.total||r.principal+r.interest), closing:+r.closing
-          });
-        });
-        Object.assign(state.cashflows, grouped);
-      }
-      save(); renderLeads(); renderPortfolio();
-      saveDocument(file, 'excel-import', { note:`Imported ${imported} rows` });
-      toast(`Imported ${imported} rows · file saved to Documents`);
-    } catch(err){ alert('Import failed: '+err.message) }
+    let plan;
+    try{ plan = _planImport(XLSX.read(ev.target.result, {type:'array'})); }
+    catch(err){ alert('Import failed: '+err.message); e.target.value=''; return; }
     e.target.value='';
+    if(plan.errors.length){
+      const shown = plan.errors.slice(0, 10).join('\n') + (plan.errors.length > 10 ? `\n…and ${plan.errors.length-10} more.` : '');
+      alert(`Import cancelled. Nothing was changed.\n\n${shown}`);
+      return;
+    }
+    const decisions = _askImportMatches(plan);
+    if(decisions === null){ alert('Import cancelled. Nothing was changed.'); return; }
+    const restored = _applyImport(plan, decisions);
+    const imported = plan.leads.length + plan.deals.length;
+    save(); renderLeads();
+    try{ renderPortfolio(); }catch(err){ console.warn('[portfolio] render', err); }
+    saveDocument(file, 'excel-import', { note:`Imported ${imported} rows` });
+    toast(`Imported ${imported} rows${restored?` (${restored} previously deleted lead${restored===1?'':'s'} restored)`:''}${plan.updatedByName?` (${plan.updatedByName} existing lead${plan.updatedByName===1?'':'s'} updated by name)`:''} · file saved to Documents`);
   };
   reader.readAsArrayBuffer(file);
 }
@@ -2868,7 +3366,8 @@ function openDealDetail(id){
         ${fact('Sanctioned', '₹'+fmt(d.size)+' Cr')}
         ${fact('Invested', '₹'+fmt(inv)+' Cr')}
         ${fact('Outstanding', '₹'+fmt(outs)+' Cr')}
-        ${fact('Coupon', pct2(+d.coupon))}
+        ${fact('Coupon (stated)', pct2(+d.coupon)+' p.a., paid '+esc(d.amortFreq||'Quarterly'))}
+        ${fact('Effective return (XIRR)', '<span style="color:var(--orange)">'+pct(dxirr)+'</span>')}
         ${fact('Tenor', (d.tenor||'—')+' months')}
         ${fact('Moratorium', (d.moratorium||0)+' months')}
         ${fact('Repayment', esc(d.repayType||'—'))}
@@ -2991,13 +3490,13 @@ function downloadDocument(id){
 }
 function deleteDocument(id){
   if(!confirm('Delete this document?')) return;
-  state.documents = (state.documents||[]).filter(x=>x.id!==id);
+  _tombstoneDocuments([id]);
   save(); renderDocuments(); toast('Document deleted');
 }
 function clearAllDocuments(){
   if(!(state.documents||[]).length) return;
   if(!confirm('Delete ALL saved documents? This cannot be undone.')) return;
-  state.documents = []; save(); renderDocuments(); toast('All documents cleared');
+  _tombstoneDocuments(state.documents.map(d=>d.id)); save(); renderDocuments(); toast('All documents cleared');
 }
 
 /* =========================================================
@@ -3006,18 +3505,10 @@ function clearAllDocuments(){
 renderModeForm();
 renderLeads();
 (async () => {
-  const ok = await cloudHydrate({ force:true });
-  if(ok){
-    renderLeads();
-    try{ renderRejected(); renderReevalBanner(); }catch(_){ }
-    if(document.getElementById('portfolio')?.classList.contains('active')) renderPortfolio();
-    if(document.getElementById('documents')?.classList.contains('active')) renderDocuments();
-    cloudSubscribe();
-    startCloudResilience();
-    toast('☁️ Live sync enabled');
-  } else {
-    toast('⚠️ Cloud sync unavailable — using local data');
-  }
+  // Retries start whatever the first result, so a failed first load is not the end of syncing (PT-05).
+  startCloudResilience();
+  const ok = await cloudSyncTick();
+  if(!ok) toast('⚠️ Cloud sync unavailable — using local data');
   backfillSectors();
 })();
 window.addEventListener('beforeunload', save);
@@ -3047,7 +3538,7 @@ async function backfillSectors(force){
   let updated = 0;
   for(const t of targets){
     const sector = await classifyOne(t.obj.company);
-    if(sector && sector!=='Other'){ t.obj.sector = sector; updated++; }
+    if(sector && sector!=='Other'){ t.obj.sector = sector; touch(t.obj); updated++; }
     await new Promise(r=>setTimeout(r, 250));   // gentle pacing
   }
   if(updated){
@@ -3074,6 +3565,7 @@ function setRejSubtab(s){ _rejSubtab = s;
 function _isRejected(l){ return (l.stage||'').startsWith('Rejected'); }
 function _rejStageNum(s){ const m = (s||'').match(/Stage\s*(\d)/); return m?+m[1]:0; }
 function _rejList(){
+  _syncFilterOptions('rejFilterSector', (state.leads||[]).filter(_isRejected).map(l=>l.sector));
   const q = (document.getElementById('rejSearch')?.value||'').toLowerCase();
   const sec = document.getElementById('rejFilterSector')?.value||'';
   const dr = document.getElementById('rejFilterDateRange')?.value||'';
@@ -3086,7 +3578,9 @@ function _rejList(){
   arr = arr.filter(l=>{
     if(q && !(l.company||'').toLowerCase().includes(q)) return false;
     if(sec && l.sector!==sec) return false;
-    if(cutoff){ const t = new Date(l.rejectedAt||l.updatedAt||l.createdAt||0).getTime(); if(t<cutoff) return false; }
+    // Client decision Q5 (3 Nov 2026): a rejected lead with no rejection date is not given one. It appears only when
+    // no date range is chosen, and is labelled "date unknown". (Before, the last-update date stood in for it.)
+    if(cutoff){ if(!l.rejectedAt) return false; const t = new Date(l.rejectedAt).getTime(); if(!(t>=cutoff)) return false; }
     if(re==='yes' && !l.reevaluateFlag) return false;
     if(re==='no' && l.reevaluateFlag) return false;
     return true;
@@ -3103,6 +3597,7 @@ function renderRejected(){
   if(c('rsCnt1')) c('rsCnt1').textContent = all.filter(l=>l.stage==='Rejected – Stage 1').length;
   if(c('rsCnt2')) c('rsCnt2').textContent = all.filter(l=>l.stage==='Rejected – Stage 2').length;
   if(c('rsCnt3')) c('rsCnt3').textContent = all.filter(l=>l.stage==='Rejected – Stage 3').length;
+  if(c('rsCntUn')) c('rsCntUn').textContent = all.filter(l=>l.stage===UNSTAGED_REJECTED).length;
   if(c('rsCntRe')) c('rsCntRe').textContent = all.filter(l=>l.reevaluateFlag).length;
   // banner inside rejected page
   const reCount = all.filter(l=>l.reevaluateFlag).length;
@@ -3130,11 +3625,11 @@ function renderRejected(){
 }
 function _renderRejCard(l){
   const sn = _rejStageNum(l.stage);
-  const stageBadgeCls = sn===1?'rej-stage-1':sn===2?'rej-stage-2':'rej-stage-3';
-  const dateAdded = l.rejectedAt ? new Date(l.rejectedAt).toLocaleDateString() : '—';
+  const stageBadgeCls = sn===1?'rej-stage-1':sn===2?'rej-stage-2':sn===3?'rej-stage-3':'rej-stage-unstaged';
+  const dateAdded = l.rejectedAt ? new Date(l.rejectedAt).toLocaleDateString() : 'date unknown';
   const news = Array.isArray(l.marketNews) ? l.marketNews : [];
   const lastFetched = l.marketNewsFetchedAt ? new Date(l.marketNewsFetchedAt).toLocaleDateString() : 'never';
-  const expanded = l._marketExpanded;
+  const expanded = _marketExpandedIds.has(l.id);
   const investors = (l.coInvestors||[]).filter(Boolean);
   return `<div class="rej-card ${l.reevaluateFlag?'flagged':''}">
     <div class="rc-head">
@@ -3142,7 +3637,7 @@ function _renderRejCard(l){
         <div class="rc-name" onclick="openLeadDetail('${esc(l.id)}')">${esc(l.company)}${l.reevaluateFlag?' <span title="Flagged for re-evaluation">⚑</span>':''}</div>
         <div class="rc-meta"><span>${esc(l.sector||'—')}</span>·<span>Added: ${esc(dateAdded)}</span>${l.size?`·<span>₹${fmt(l.size)} Cr</span>`:''}</div>
       </div>
-      <span class="badge ${stageBadgeCls}">${esc(l.stage.replace('Rejected – ',''))}</span>
+      <span class="badge ${stageBadgeCls}">${esc(l.stage===UNSTAGED_REJECTED ? 'Unstaged' : l.stage.replace('Rejected – ',''))}</span>
     </div>
     <div class="rej-reason"><b style="color:var(--text-dim);font-size:10px;text-transform:uppercase;letter-spacing:.05em">Reason</b><div style="margin-top:3px;white-space:pre-wrap">${esc(l.rejectionReason||l.remarks||'No reason captured.')}</div>
       <div style="font-size:10.5px;color:var(--text-dim);margin-top:6px">By <b>${esc(l.rejectedBy||'—')}</b></div>
@@ -3174,15 +3669,14 @@ function _renderNewsList(news){
   </div>`).join('');
 }
 function toggleMarketActivity(id){
-  const l = state.leads.find(x=>x.id===id); if(!l) return;
-  l._marketExpanded = !l._marketExpanded;
+  if(_marketExpandedIds.has(id)) _marketExpandedIds.delete(id); else _marketExpandedIds.add(id);
   renderRejected();
 }
 function toggleReevaluate(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
   l.reevaluateFlag = !l.reevaluateFlag;
   l.notesLog = l.notesLog||[]; l.notesLog.push({ts:new Date().toISOString(), text:`Re-evaluate flag ${l.reevaluateFlag?'SET':'cleared'}`});
-  save(); renderRejected(); renderReevalBanner();
+  touch(l); save(); renderRejected(); renderReevalBanner();
 }
 async function fetchMarketNews(id, silent){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
@@ -3212,7 +3706,7 @@ async function fetchMarketNews(id, silent){
     const inv = new Set(l.coInvestors||[]);
     fetched.forEach(n=>(n.investors||[]).forEach(i=>i && inv.add(i)));
     l.coInvestors = [...inv];
-    save(); renderRejected();
+    touch(l); save(); renderRejected();
     if(!silent) toast('News updated');
   }catch(e){ console.error(e); _marketNewsFailedAt.set(id, Date.now()); if(!silent) toast('News fetch error'); }
   finally{ _marketNewsInFlight.delete(id); }
@@ -3232,7 +3726,7 @@ function addManualNews(id){
   let source = ''; try{ source = url ? new URL(url).hostname.replace('www.','') : ''; }catch(_){ source = ''; }
   l.marketNews = l.marketNews||[];
   l.marketNews.unshift({ headline, date, url, source, manual:true, investors:[] });
-  save(); renderRejected();
+  touch(l); save(); renderRejected();
 }
 function addCoInvestor(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
@@ -3241,12 +3735,12 @@ function addCoInvestor(id){
   l.coInvestors = l.coInvestors||[];
   l.coInvestors.push(round ? `${name} (${round})` : name);
   l.notesLog = l.notesLog||[]; l.notesLog.push({ts:new Date().toISOString(), text:`Co-investor logged: ${name}${round?` — ${round}`:''}`});
-  save(); renderRejected();
+  touch(l); save(); renderRejected();
 }
 function removeCoInvestor(id, idx){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
   if(!l.coInvestors) return;
-  l.coInvestors.splice(idx,1); save(); renderRejected();
+  l.coInvestors.splice(idx,1); touch(l); save(); renderRejected();
 }
 function moveBackToActive(id){
   const l = state.leads.find(x=>x.id===id); if(!l) return;
@@ -3256,7 +3750,7 @@ function moveBackToActive(id){
   l.notesLog = l.notesLog||[];
   l.notesLog.push({ts:new Date().toISOString(), text:`Moved from ${l.stage} → Active by ${who}. Reason: ${why.trim()}`});
   l.stage = 'Active'; l.reevaluateFlag = false;
-  save(); renderRejected(); renderLeads(); toast('Moved to Active Pipeline');
+  touch(l); save(); renderRejected(); renderLeads(); toast('Moved to Active Pipeline');
 }
 function renderReevalBanner(){
   const box = document.getElementById('reevalBannerLeads'); if(!box) return;
@@ -3297,28 +3791,6 @@ function confirmReject(e){
   l.updatedAt = l.rejectedAt;
   save(); closeModal('rejectModal'); renderLeads(); renderRejected(); try{renderReevalBanner();}catch(_){ } toast('Lead moved to Rejected');
 }
-// Intercept quickChangeStage to prompt the rejection modal when moving into a rejected stage
-(function(){
-  if(typeof window.quickChangeStage === 'function'){
-    const orig = window.quickChangeStage;
-    window.quickChangeStage = function(id){
-      const l = state.leads.find(x=>x.id===id); if(!l) return orig(id);
-      const stages = ['Active','Passive','Rejected – Stage 1','Rejected – Stage 2','Rejected – Stage 3','Lost','Closed'];
-      const opts = stages.map((s,i)=>`${i+1}. ${s}`).join('\n');
-      const ans = window.prompt(`Change status for ${l.company}:\n${opts}\n\nEnter number:`, String(stages.indexOf(l.stage)+1 || 1));
-      if(!ans) return;
-      const n = parseInt(ans,10); if(isNaN(n)||n<1||n>stages.length) return;
-      const newStage = stages[n-1];
-      if(newStage.startsWith('Rejected')){ openRejectModal(id, newStage); return; }
-      const wasRej = (l.stage||'').startsWith('Rejected');
-      l.stage = newStage;
-      l.notesLog = l.notesLog || [];
-      if(wasRej) l.notesLog.push({ts:new Date().toISOString(), text:`Moved out of Rejected → ${newStage}`});
-      l.updatedAt = new Date().toISOString();
-      save(); renderLeads(); renderRejected(); try{renderReevalBanner();}catch(_){ }
-    };
-  }
-})();
 </script>
 </body>
 </html>
